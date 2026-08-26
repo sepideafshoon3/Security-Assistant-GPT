@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+pyyaml
+httpx
+rich
+openai>=1.0.0
+beautifulsoup4
+requests
+jinja2>=3.1
+
+[dev]
+pytest
+pytest-asyncio
+mypy
+ruff

@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: security-assistant-gpt
+Version: 0.1.0
+Summary: Lab-only defensive security assistant with policy guardrails.
+Author-email: dx <dx811@proton.me>
+Requires-Python: >=3.11
+Requires-Dist: fastapi
+Requires-Dist: uvicorn[standard]
+Requires-Dist: pydantic>=2
+Requires-Dist: pyyaml
+Requires-Dist: httpx
+Requires-Dist: rich
+Requires-Dist: openai>=1.0.0
+Requires-Dist: beautifulsoup4
+Requires-Dist: requests
+Requires-Dist: jinja2>=3.1
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: ruff; extra == "dev"

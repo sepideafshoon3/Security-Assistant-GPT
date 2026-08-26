@@ -1,0 +1,3 @@
+osv_scanner:
+  timeout_seconds: 300
+  ecosystem_overrides: []

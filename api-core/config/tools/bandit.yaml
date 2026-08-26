@@ -1,0 +1,4 @@
+bandit:
+  severity_level: "MEDIUM"
+  confidence_level: "MEDIUM"
+  timeout_seconds: 300

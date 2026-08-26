@@ -1,0 +1,31 @@
+app:
+  name: "security-assistant-gpt"
+  env: "development"
+  port: 8000
+
+logging:
+  file: "logs/app.log"
+
+reports:
+  dir: "data/reports"
+
+knowledge_base:
+  dir: "data/knowledge-base"
+
+llm:
+  enabled: true
+  # Optional: "openai" | "xai". When omitted (or null), the router auto-detects
+  # from the model name (e.g. grok / x-ai/* → xai). Env LLM_PROVIDER wins.
+  # provider: "openai"
+  # Overridden by OPENAI_DEFAULT_CHAT_MODEL or LLM_MODEL env when set
+  # Completion budget (clamped to 1..65536 in load_llm_config; API calls cap at 8192)
+  max_tokens: 4096
+  enable_planner: true
+
+# Layered prompting (see src/prompts/layers/).
+# secure_chat always uses query_mode=security + layer_mode=multi
+# (full security stack, discrete system message per layer).
+# MRROBOT_PROMPT_MODE / PROMPT_MODE still apply to non-secure_chat helpers
+# that call the engine directly (e.g. tests, planner single-layer merge).
+prompting:
+  mode: multi

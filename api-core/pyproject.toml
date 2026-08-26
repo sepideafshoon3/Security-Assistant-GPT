@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "security-assistant-gpt"
+version = "0.1.0"
+description = "Lab-only defensive security assistant with policy guardrails."
+authors = [{ name = "dx", email = "dx811@proton.me" }]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pyyaml",
+    "httpx",
+    "rich",
+    "openai>=1.0.0",
+    "beautifulsoup4",
+    "requests",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "mypy",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

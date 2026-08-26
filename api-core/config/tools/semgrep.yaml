@@ -1,0 +1,4 @@
+semgrep:
+  config: "p/ci"
+  timeout_seconds: 300
+  extra_args: []
