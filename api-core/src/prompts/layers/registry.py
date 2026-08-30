@@ -100,25 +100,34 @@ def _skills_blob(
 
 
 def build_openai_registry() -> ContentRegistry:
-    """Register OpenAI prompt modules under stable content_ref keys.
-
-    """
-
+    """Register OpenAI prompt modules under stable content_ref keys."""
     return ContentRegistry(
         {
-
+            "root": (
+                "You are a security-focused coding assistant. You help the user "
+                "review, analyze, and improve the security of code and systems "
+                "they own or are explicitly authorized to test."
+            ),
+            "policy": (
+                "Scope rules:\n"
+                "- Only analyze code/targets the user owns or has explicit written authorization to test.\n"
+                "- Do not produce attack plans, exploit chains, or payloads against third-party "
+                "or unauthorized systems.\n"
+                "- Static/dependency analysis (semgrep, bandit, osv-scanner) results should be explained "
+                "in terms of the vulnerability and a concrete remediation, not an exploitation path.\n"
+                "- If a request is about a target outside the user's declared scope, decline and ask "
+                "for confirmation of ownership/authorization first."
+            ),
+            "style": (
+                "Be direct and technical. Prefer concrete file/line references and fixes over general advice."
+            ),
         }
     )
 
 
 def build_xai_registry() -> ContentRegistry:
-  
-    return ContentRegistry(
-        {
-       
-        }
-    )
-
+    # Same content — provider-specific overrides can be added later if needed.
+    return build_openai_registry()
 
 
 def build_default_registry() -> ContentRegistry:

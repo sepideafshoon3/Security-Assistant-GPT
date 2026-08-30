@@ -43,80 +43,44 @@ def build_secure_chat_stack(
     *,
     security_mode: bool = True,
     include_api_system: bool = False,
-    include_dark_recon: bool = False,
+    include_dark_recon: bool = False,   # kept for signature compat, no-op below
     include_api_user: bool = False,
-    include_grok: bool = False,  # NEW: flag to include Grok prompt
+    include_grok: bool = False,
     mode: PromptMode = PromptMode.MULTI,
     merge_same_role: bool = False,
-    provider: str = "openai",  # NEW: provider context
+    provider: str = "openai",
 ) -> PromptStackConfig:
-    """Build the configurable secure_chat layer stack.
+    layers: List[PromptLayerConfig] = [
+        _sys("root", order=10, content_ref="root"),
+        _sys("style", order=20, content_ref="style"),
+        _sys("policy", order=30, content_ref="policy", priority=100),
+    ]
 
-    This is the single source of truth for secure-chat system layers.
-    Order and content preserve the former ``_build_secure_chat_messages_legacy``
-    assembly (root/raw/style/policy/skills/developer/steps/… plus optional
-    API and dark_recon context). Layers are enableable, reorderable, and
-    conditional.
-
-    Dynamic content (API system prompt, dark_recon JSON, API user msg)
-    is supplied at compose-time via *variables* and optional inline
-    layers toggled by the include_* flags.
-    """
-    layers: List[PromptLayerConfig] = []
-
-    # --- Security persona stack (heavy) ---
-    # order mirrors previous list construction for behavioural parity
-    layers.extend(
-        [
-
-        ]
-    )
-
-    # NEW: Add Grok prompt layer for XAI provider
-    if include_grok and provider == "xai":
-        layers.append(
-
-        )
-    elif include_grok and provider == "openai":
-        # Optionally add a different prompt for OpenAI
-        layers.append(
-            _sys(
-
-            )
-        )
-
-    # Dynamic / optional layers
     if include_api_system:
         layers.append(
             _sys(
-
+                "api_system",
+                order=40,
+                content="{{ api_system_prompt }}",
+                required_variables=["api_system_prompt"],
             )
         )
 
-    if include_dark_recon:
-        layers.append(
-            _sys(
-    
-            )
-        )
-
-    # policy_controls last among system layers for security mode
-    layers.append(
-        _sys(
-
-        )
-    )
+    # dark_recon injection intentionally removed — this stack no longer
+    # feeds raw recon output into an "attack plan" persona.
 
     if include_api_user:
         layers.append(
             PromptLayerConfig.model_validate(
-
+                {
+                    "id": "api_user",
+                    "role": PromptRole.USER,
+                    "order": 90,
+                    "content": "{{ api_user_message }}",
+                    "required_variables": ["api_user_message"],
+                }
             )
         )
-
-    # When not in security mode the conditions above already drop persona
-    # layers, leaving style + core_system + structure — the slim general stack.
-    _ = security_mode  # documented for callers; conditions read it from context
 
     return PromptStackConfig(
         name="secure_chat_security" if security_mode else "secure_chat_general",
@@ -131,45 +95,20 @@ def build_planner_stack(
     *,
     with_evidence: bool = False,
     mode: PromptMode = PromptMode.SINGLE,
-    provider: str = "openai",  # NEW: provider context
-    include_grok: bool = False,  # NEW: include Grok in planner
+    provider: str = "openai",
+    include_grok: bool = False,  # currently unused, kept for signature compat
 ) -> PromptStackConfig:
-    """Planner path: multi-layer sources merged into a single system prompt.
-
-    Preserves the historical concatenation used by ``run_planning_agent``.
-    """
     layers = [
-
+        _sys("planner_root", order=10, content_ref="root"),
     ]
-    
-    # NEW: Add Grok prompt to planner for XAI provider
-    if include_grok and provider == "xai":
-        layers.append(
-            _sys(
-                "grok",
-                order=55,
-                content_ref="grok",
-                priority=55,  # Between open_ai_policy and evidence
-            )
-        )
-    
+
     if with_evidence:
         layers.append(
-            _sys(
-                "planner_evidence",
-                order=60,
-                content_ref="planner_with_evidence",
-                priority=50,
-            )
+            _sys("planner_evidence", order=60, content="You must ground every step in the provided evidence.", priority=50)
         )
     else:
         layers.append(
-            _sys(
-                "json_only",
-                order=60,
-                content="\n You are a JSON-only assistant.",
-                priority=50,
-            )
+            _sys("json_only", order=60, content="\nYou are a JSON-only assistant.", priority=50)
         )
 
     return PromptStackConfig(
