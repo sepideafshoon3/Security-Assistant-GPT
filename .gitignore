@@ -32,3 +32,4 @@ build/
 .coverage
 htmlcov/
 data/
+package-lock.json
