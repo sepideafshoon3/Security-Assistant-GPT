@@ -21,6 +21,14 @@ export interface Conversation {
   lastMessage: string;
   timestamp: Date;
   messages: Message[];
+  status?: "clean" | "findings" | "critical"; // TODO: source from backend scan results
+}
+
+function deriveStatus(text: string): Conversation["status"] {
+  const t = (text || "").toLowerCase();
+  if (/\bcritical\b|\bcve-\d{4}-\d+\b|\brce\b/.test(t)) return "critical";
+  if (/vulnerab|finding|semgrep|bandit|osv-scan/.test(t)) return "findings";
+  return "clean";
 }
 
 /**
@@ -47,6 +55,7 @@ function mapBackendConversationToConversation(
     lastMessage: lastMessageText,
     timestamp: ts,
     messages,
+    status: deriveStatus(`${summary.theme || ""} ${lastMessageText}`),
   };
 }
 
