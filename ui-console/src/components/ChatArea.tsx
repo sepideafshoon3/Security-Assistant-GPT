@@ -95,12 +95,12 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
 
       {/* Conversation Info */}
       <div className="px-6 py-3 bg-gradient-to-r from-black/20 to-black/30 backdrop-blur-sm border-b border-white/10">
-        <div className="text-xs font-mono text-cyan-400/80 mb-1">
+        {/* <div className="text-xs font-mono text-cyan-400/80 mb-1">
           SESSION_ID:{" "}
           <span className="text-green-400">
             {conversation ? conversation.id : "pending"}
           </span>
-        </div>
+        </div> */}
         <div className="text-sm text-gray-300">
           {conversation ? conversation.title : "New Conversation"}
         </div>
@@ -142,7 +142,7 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
                 >
                   {formatMessageTime(message.timestamp)}
                 </span>
-                <span
+                {/* <span
                   className={`text-xs font-mono ${
                     message.sender === "user"
                       ? "text-black/50"
@@ -150,7 +150,7 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
                   }`}
                 >
                   #{message.id}
-                </span>
+                </span> */}
               </div>
             </div>
           </div>
@@ -158,34 +158,44 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="p-6 bg-black/30 backdrop-blur-xl border-t border-white/10 shadow-2xl">
-        <form onSubmit={handleSubmit} className="flex items-end gap-4">
+      {/* Input Area — floating */}
+      <div className="relative px-6 pb-6 pt-2">
+        <form
+          onSubmit={handleSubmit}
+          className="flex items-end gap-3 rounded-3xl bg-slate-900/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-indigo-400/20 shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_24px_-4px_rgba(99,102,241,0.25)] transition-shadow focus-within:ring-indigo-400/40 focus-within:shadow-[0_0_0_1px_rgba(99,102,241,0.15),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_32px_-2px_rgba(99,102,241,0.35)]"
+        >
           <div className="flex-1 relative">
+            <label htmlFor="chat-input" className="sr-only">
+              Message
+            </label>
             <textarea
+              id="chat-input"
               ref={textareaRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message... (Shift+Enter for new line)"
+              placeholder="Type a message..."
+              aria-describedby="chat-input-hint"
               rows={1}
-              className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl px-6 py-3.5 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20 focus:bg-white/10 transition-all shadow-lg resize-none overflow-y-auto"
-              style={{ minHeight: "52px", maxHeight: "200px" }}
+              className="w-full bg-transparent text-gray-100 placeholder-gray-500 focus:outline-none resize-none overflow-y-auto py-2.5"
+              style={{ minHeight: "40px", maxHeight: "200px" }}
             />
+            <span id="chat-input-hint" className="sr-only">
+              Press Enter to send, Shift plus Enter for a new line.
+            </span>
           </div>
           <button
             type="submit"
             disabled={!inputValue.trim()}
-            className="w-12 h-12 bg-gradient-to-br from-cyan-400 via-cyan-500 to-green-500 rounded-2xl flex items-center justify-center hover:from-cyan-300 hover:to-green-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-cyan-500/50 hover:shadow-cyan-500/70 hover:scale-105 flex-shrink-0"
+            aria-label="Send message"
+            className="w-11 h-11 mb-0.5 bg-indigo-500 rounded-full flex items-center justify-center hover:bg-indigo-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_16px_-2px_rgba(99,102,241,0.6)] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
           >
-            <Send className="w-5 h-5 text-black" />
+            <Send className="w-4 h-4 text-white" aria-hidden />
           </button>
         </form>
-        <div className="mt-3 text-xs text-center font-mono flex items-center justify-center gap-2">
-          <span className="animate-pulse text-cyan-400">▶</span>
-          <span className="bg-gradient-to-r from-cyan-400 to-green-400 bg-clip-text text-transparent">
-          </span>
-        </div>
+        <p className="mt-2 text-xs text-center text-slate-500">
+          Shift+Enter for a new line
+        </p>
       </div>
     </div>
   );
