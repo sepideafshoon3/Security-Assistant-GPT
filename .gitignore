@@ -31,3 +31,4 @@ build/
 # Coverage
 .coverage
 htmlcov/
+data/
