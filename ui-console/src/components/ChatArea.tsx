@@ -7,6 +7,7 @@ import {
   Copy,
   Check,
   RotateCcw,
+  Pencil,
 } from "lucide-react";
 import { MessageContent } from "./MessageContent";
 
@@ -110,7 +111,11 @@ function formatRelativeTime(date: Date) {
   });
 }
 
-export function ChatArea({ conversation, onSendMessage, onResendMessage }: ChatAreaProps) {
+export function ChatArea({
+  conversation,
+  onSendMessage,
+  onResendMessage,
+}: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
   const [greeting] = useState(pickGreeting);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -204,6 +209,20 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage }: ChatA
     }
   };
 
+  const handleEditClick = (text: string) => {
+  triggerStart(); 
+  setInputValue(text);
+
+  requestAnimationFrame(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+};
+
   return (
     <main className="flex-1 flex flex-col bg-black/10 backdrop-blur-xl">
       {/* Chat Header */}
@@ -275,6 +294,26 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage }: ChatA
                 <span className="text-xs text-slate-400">
                   {formatRelativeTime(message.timestamp)}
                 </span>
+                {message.sender === "user" && (
+                  <button
+                    type="button"
+                    onClick={() => onResendMessage(message.id)}
+                    aria-label="Resend message"
+                    className="text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden />
+                  </button>
+                )}
+                {message.sender === "user" && (
+                  <button
+                    type="button"
+                    onClick={() => handleEditClick(message.text)}
+                    aria-label="Edit message"
+                    className="text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
+                  >
+                    <Pencil className="w-3.5 h-3.5" aria-hidden />
+                  </button>
+                )}
                 <button
                   onClick={() => handleCopy(message.id, message.text)}
                   aria-label="Copy message"
@@ -286,16 +325,6 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage }: ChatA
                     <Copy className="w-3.5 h-3.5" aria-hidden />
                   )}
                 </button>
-                {message.sender === "user" && (
-                  <button
-                    type="button"
-                    onClick={() => onResendMessage(message.id)}
-                    aria-label="Resend message"
-                    className="text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" aria-hidden />
-                  </button>
-                )}
               </div>
             </div>
           ))}
