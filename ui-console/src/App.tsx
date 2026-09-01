@@ -3,17 +3,20 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
+import { ErrorBanner } from "./components/ErrorBanner";
 import {
   sendMessageToBackend,
   type BackendChatResponse,
   fetchConversations,
   type BackendConversationSummary,
+  getFriendlyErrorMessage,
 } from "./api/chat";
 export interface Message {
   id: string;
   text: string;
   sender: "user" | "contact";
   timestamp: Date;
+  failed?: boolean;
 }
 
 export interface Conversation {
@@ -102,7 +105,7 @@ export default function App() {
   >(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const [errorRetry, setErrorRetry] = useState<(() => void) | null>(null);
   const selectedConversation = conversations.find(
     (c) => c.id === selectedConversationId,
   );
@@ -121,7 +124,8 @@ export default function App() {
         }
       } catch (e: any) {
         console.error(e);
-        setError(e?.message || "Failed to load conversations");
+        setError(getFriendlyErrorMessage(e));
+        setErrorRetry(() => load);
       } finally {
         setIsLoading(false);
       }
@@ -133,6 +137,7 @@ export default function App() {
   // "New Chat" button: فقط کانورسیشن جدید شروع کن؛ قبلی‌ها رو پاک نکن.
   const handleNewConversation = () => {
     setError(null);
+    setErrorRetry(null);
     setIsLoading(false);
     setSelectedConversationId(null);
   };
@@ -198,7 +203,21 @@ export default function App() {
         setSelectedConversationId(resp.conversation_id);
       } catch (e: any) {
         console.error(e);
-        setError(e?.message || "Failed to send message");
+        const friendly = getFriendlyErrorMessage(e);
+        setError(friendly);
+        setErrorRetry(() => () => handleSendMessage(trimmed));
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === tempId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === userMessage.id ? { ...m, failed: true } : m,
+                  ),
+                }
+              : c,
+          ),
+        );
       } finally {
         setIsLoading(false);
       }
@@ -250,12 +269,25 @@ export default function App() {
       setSelectedConversationId(resp.conversation_id);
     } catch (e: any) {
       console.error(e);
-      setError(e?.message || "Failed to send message");
+      const friendly = getFriendlyErrorMessage(e);
+      setError(friendly);
+      setErrorRetry(() => () => handleSendMessage(trimmed));
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === current.id
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === userMessage.id ? { ...m, failed: true } : m,
+                ),
+              }
+            : c,
+        ),
+      );
     } finally {
       setIsLoading(false);
     }
   };
-
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
   };
@@ -266,6 +298,15 @@ export default function App() {
 
     const target = conv.messages.find((m) => m.id === messageId);
     if (!target) return;
+
+    // Remove the old (possibly failed) copy before sending a fresh one
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conv.id
+          ? { ...c, messages: c.messages.filter((m) => m.id !== messageId) }
+          : c,
+      ),
+    );
 
     handleSendMessage(target.text);
   };
@@ -298,13 +339,10 @@ export default function App() {
           </h1>
         </div>
 
-        {/* Optional loading/error indicator */}
+        {/* Loading indicator (errors now shown via ErrorBanner below) */}
         <div className="ml-auto flex items-center gap-4 text-xs">
           {isLoading && (
             <span className="text-cyan-300 animate-pulse">thinking…</span>
-          )}
-          {error && (
-            <span className="text-red-400 max-w-xs truncate">{error}</span>
           )}
         </div>
       </div>
@@ -321,12 +359,32 @@ export default function App() {
         />
 
         {/* Chat Area */}
-        <ChatArea
+                <ChatArea
           conversation={selectedConversation || null}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
         />
       </div>
+
+      {error && (
+        <ErrorBanner
+          message={error}
+          onDismiss={() => {
+            setError(null);
+            setErrorRetry(null);
+          }}
+          onRetry={
+            errorRetry
+              ? () => {
+                  const retry = errorRetry;
+                  setError(null);
+                  setErrorRetry(null);
+                  retry();
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

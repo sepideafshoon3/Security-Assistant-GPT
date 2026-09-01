@@ -10,6 +10,16 @@ export interface BackendChatResponse {
   messages?: BackendChatMessage[];
 }
 
+export function getFriendlyErrorMessage(err: unknown): string {
+  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    return "Can't reach the server. Is the backend running?";
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return "Something went wrong.";
+}
+
 // همون base URL که برای /chat استفاده می‌کنی:
 export const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";

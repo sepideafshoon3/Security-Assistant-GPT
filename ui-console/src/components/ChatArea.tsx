@@ -12,6 +12,7 @@ import {
   Paperclip,
   X,
   FileText,
+  AlertCircle,
 } from "lucide-react";
 import { MessageContent } from "./MessageContent";
 
@@ -344,6 +345,8 @@ export function ChatArea({
                   message.sender === "user"
                     ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
                     : "bg-white/5 backdrop-blur-md border border-white/10 text-gray-100 shadow-xl"
+                } ${
+                  message.failed ? "ring-2 ring-red-500/60" : ""
                 } min-w-0 break-words rounded-2xl px-5 py-3.5 transition-all`}
               >
                 <span className="sr-only">
@@ -353,6 +356,18 @@ export function ChatArea({
                 </span>
                 <MessageContent text={message.text} />
               </div>
+
+              {message.failed && (
+                <div className="flex items-center gap-1.5 mt-1 px-1">
+                  <AlertCircle
+                    className="w-3.5 h-3.5 text-red-400"
+                    aria-hidden
+                  />
+                  <span className="text-xs text-red-400">
+                    Failed to send — hover to retry
+                  </span>
+                </div>
+              )}
 
               {/* Hover/focus-revealed meta row — separate, sits below/outside the bubble */}
               <div className="flex items-center gap-3 h-0 group-hover:h-5 group-focus-within:h-5 overflow-hidden transition-all duration-150 mt-1 px-1">
