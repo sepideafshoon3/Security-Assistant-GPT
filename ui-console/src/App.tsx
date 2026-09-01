@@ -340,11 +340,7 @@ export default function App() {
         </div>
 
         {/* Loading indicator (errors now shown via ErrorBanner below) */}
-        <div className="ml-auto flex items-center gap-4 text-xs">
-          {isLoading && (
-            <span className="text-cyan-300 animate-pulse">thinking…</span>
-          )}
-        </div>
+        <div className="ml-auto flex items-center gap-4 text-xs" />
       </div>
 
       {/* Main Content */}
@@ -359,10 +355,11 @@ export default function App() {
         />
 
         {/* Chat Area */}
-                <ChatArea
+        <ChatArea
           conversation={selectedConversation || null}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
+          isLoading={isLoading}
         />
       </div>
 
