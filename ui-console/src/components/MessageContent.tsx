@@ -105,6 +105,45 @@ export function MessageContent({ text }: MessageContentProps) {
     }
   };
 
+function markdownToText(text: string): string {
+  return text
+    // headings: ### Title -> Title
+    .replace(/^#{1,6}\s+/gm, "")
+
+    // images: ![alt](url) -> alt   (must run BEFORE the link regex, which
+    // is a subset pattern and would otherwise leave a stray "!")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+
+    // links: [Google](https://google.com) -> Google
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+
+    // bold / italic
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    // italic underscores: only strip when NOT touching a word character,
+    // so snake_case / my_var_name / __init__.py survive untouched
+    .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, "$1")
+
+    // strikethrough: ~~text~~ -> text
+    .replace(/~~(.*?)~~/g, "$1")
+
+    // inline code: `hello` -> hello
+    .replace(/`([^`]+)`/g, "$1")
+
+    // unordered lists: - item / * item -> item
+    .replace(/^\s*[-*+]\s+/gm, "")
+
+    // numbered lists: 1. item -> item
+    .replace(/^\s*\d+\.\s+/gm, "")
+
+    // blockquote: > text -> text
+    .replace(/^\s*>\s?/gm, "")
+
+    // horizontal rules (---, ***, ___, or mixes of 3+)
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, "");
+}
+
   return (
     <div className="space-y-3">
       {blocks.map((block, index) => {
@@ -114,7 +153,7 @@ export function MessageContent({ text }: MessageContentProps) {
               key={index}
               className="whitespace-pre-wrap break-words leading-relaxed"
             >
-              {block.content}
+              {markdownToText(block.content)}
             </p>
           );
         }

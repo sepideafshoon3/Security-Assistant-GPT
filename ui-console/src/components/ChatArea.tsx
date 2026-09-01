@@ -1,34 +1,69 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import type { Conversation } from "../App";
-import { Send, MoreVertical, Trash2, Copy, Check } from "lucide-react";
+import {
+  Send,
+  MoreVertical,
+  Trash2,
+  Copy,
+  Check,
+  RotateCcw,
+} from "lucide-react";
 import { MessageContent } from "./MessageContent";
 
 interface ChatAreaProps {
   conversation: Conversation | null;
   onSendMessage: (text: string) => void;
+  onResendMessage: (messageId: string) => void;
 }
 
-const GREETINGS: Record<"morning" | "afternoon" | "evening" | "night", { title: string; subtitle: string }[]> = {
+const GREETINGS: Record<
+  "morning" | "afternoon" | "evening" | "night",
+  { title: string; subtitle: string }[]
+> = {
   morning: [
     { title: "Good morning ☀️", subtitle: "What are we breaking today?" },
-    { title: "Morning, dev", subtitle: "Coffee's brewing — so is the next finding." },
-    { title: "Rise and grep", subtitle: "Let's see what yesterday's build left behind." },
+    {
+      title: "Morning, dev",
+      subtitle: "Coffee's brewing — so is the next finding.",
+    },
+    {
+      title: "Rise and grep",
+      subtitle: "Let's see what yesterday's build left behind.",
+    },
   ],
   afternoon: [
-    { title: "Good afternoon", subtitle: "Mid-day check — any weird logs yet?" },
+    {
+      title: "Good afternoon",
+      subtitle: "Mid-day check — any weird logs yet?",
+    },
     { title: "Hey", subtitle: "Let's find something worth patching." },
     { title: "Afternoon", subtitle: "Paste a repo, a diff, or just say hi." },
   ],
   evening: [
-    { title: "Good evening", subtitle: "Wrapping up, or just getting started?" },
-    { title: "Evening", subtitle: "Prime time for \"just one more commit.\"" },
+    {
+      title: "Good evening",
+      subtitle: "Wrapping up, or just getting started?",
+    },
+    { title: "Evening", subtitle: 'Prime time for "just one more commit."' },
     { title: "Hey there", subtitle: "What's on the review queue tonight?" },
   ],
   night: [
-    { title: "Late-night vibe coding? 🌙", subtitle: "Respect. What are we hunting for?" },
-    { title: "Found a bug at 2am?", subtitle: "Classic. Let's squash it together." },
-    { title: "Still up?", subtitle: "The best findings show up after midnight." },
-    { title: "3am and debugging", subtitle: "A tale as old as time. What's broken?" },
+    {
+      title: "Late-night vibe coding? 🌙",
+      subtitle: "Respect. What are we hunting for?",
+    },
+    {
+      title: "Found a bug at 2am?",
+      subtitle: "Classic. Let's squash it together.",
+    },
+    {
+      title: "Still up?",
+      subtitle: "The best findings show up after midnight.",
+    },
+    {
+      title: "3am and debugging",
+      subtitle: "A tale as old as time. What's broken?",
+    },
   ],
 };
 
@@ -47,18 +82,35 @@ function pickGreeting() {
 
 function formatRelativeTime(date: Date) {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dayDiff = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86400000);
-  const time = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const startOfDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const dayDiff = Math.round(
+    (startOfToday.getTime() - startOfDate.getTime()) / 86400000,
+  );
+  const time = date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   if (dayDiff <= 0) return `Today, ${time}`;
   if (dayDiff === 1) return `Yesterday, ${time}`;
   if (dayDiff < 7) return `${dayDiff} days ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
+export function ChatArea({ conversation, onSendMessage, onResendMessage }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
   const [greeting] = useState(pickGreeting);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -163,7 +215,9 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
           <div>
             <h2 className="text-slate-100">Security Assistant</h2>
             <p className="text-xs text-emerald-400 flex items-center gap-1">
-              <span className="motion-safe:animate-pulse" aria-hidden>●</span>
+              <span className="motion-safe:animate-pulse" aria-hidden>
+                ●
+              </span>
               {conversation ? "Active" : "Waiting for first message"}
             </p>
           </div>
@@ -209,7 +263,9 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
                 } min-w-0 break-words rounded-2xl px-5 py-3.5 transition-all`}
               >
                 <span className="sr-only">
-                  {message.sender === "user" ? "You said: " : "Assistant said: "}
+                  {message.sender === "user"
+                    ? "You said: "
+                    : "Assistant said: "}
                 </span>
                 <MessageContent text={message.text} />
               </div>
@@ -230,6 +286,16 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
                     <Copy className="w-3.5 h-3.5" aria-hidden />
                   )}
                 </button>
+                {message.sender === "user" && (
+                  <button
+                    type="button"
+                    onClick={() => onResendMessage(message.id)}
+                    aria-label="Resend message"
+                    className="text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden />
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -249,7 +315,10 @@ export function ChatArea({ conversation, onSendMessage }: ChatAreaProps) {
             </div>
           )}
 
-          <div ref={inputWrapperRef} className="w-full max-w-2xl pointer-events-auto">
+          <div
+            ref={inputWrapperRef}
+            className="w-full max-w-2xl pointer-events-auto"
+          >
             <form
               onSubmit={handleSubmit}
               className="flex items-end gap-3 rounded-3xl bg-slate-900/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-indigo-400/20 shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_24px_-4px_rgba(99,102,241,0.25)] transition-shadow focus-within:ring-indigo-400/40 focus-within:shadow-[0_0_0_1px_rgba(99,102,241,0.15),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_32px_-2px_rgba(99,102,241,0.35)]"

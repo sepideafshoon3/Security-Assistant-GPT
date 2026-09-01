@@ -260,6 +260,16 @@ export default function App() {
     setSelectedConversationId(conversationId);
   };
 
+  const handleResendMessage = (messageId: string) => {
+    const conv = selectedConversation;
+    if (!conv) return;
+
+    const target = conv.messages.find((m) => m.id === messageId);
+    if (!target) return;
+
+    handleSendMessage(target.text);
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-gray-100 relative overflow-hidden">
       {/* Background Effects */}
@@ -314,6 +324,7 @@ export default function App() {
         <ChatArea
           conversation={selectedConversation || null}
           onSendMessage={handleSendMessage}
+          onResendMessage={handleResendMessage}
         />
       </div>
     </div>
