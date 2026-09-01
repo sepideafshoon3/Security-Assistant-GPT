@@ -1,4 +1,5 @@
 // src/App.tsx
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
@@ -35,7 +36,7 @@ function deriveStatus(text: string): Conversation["status"] {
  * مپ کردن خلاصه‌ی کانورسیشن بک‌اند به مدل فرانت.
  */
 function mapBackendConversationToConversation(
-  summary: BackendConversationSummary
+  summary: BackendConversationSummary,
 ): Conversation {
   const ts = summary.last_updated ? new Date(summary.last_updated) : new Date();
 
@@ -94,6 +95,7 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
 
 export default function App() {
   // حالا چند کانورسیشن رو تو state نگه می‌داریم، نه فقط یکی.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -102,7 +104,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   const selectedConversation = conversations.find(
-    (c) => c.id === selectedConversationId
+    (c) => c.id === selectedConversationId,
   );
 
   // --- on mount: لیست کانورسیشن‌ها رو از بک‌اند بگیر ---
@@ -175,7 +177,7 @@ export default function App() {
 
         const backendMessages = mapBackendToMessages(resp);
         const assistantMessages = backendMessages.filter(
-          (m) => m.sender === "contact"
+          (m) => m.sender === "contact",
         );
         const lastAssistantText =
           assistantMessages[assistantMessages.length - 1]?.text || trimmed;
@@ -216,8 +218,8 @@ export default function App() {
               lastMessage: trimmed,
               timestamp: now,
             }
-          : conv
-      )
+          : conv,
+      ),
     );
 
     setIsLoading(true);
@@ -226,7 +228,7 @@ export default function App() {
 
       const backendMessages = mapBackendToMessages(resp);
       const assistantMessages = backendMessages.filter(
-        (m) => m.sender === "contact"
+        (m) => m.sender === "contact",
       );
       const lastAssistantText =
         assistantMessages[assistantMessages.length - 1]?.text ||
@@ -242,8 +244,8 @@ export default function App() {
                 lastMessage: lastAssistantText,
                 timestamp: new Date(),
               }
-            : conv
-        )
+            : conv,
+        ),
       );
       setSelectedConversationId(resp.conversation_id);
     } catch (e: any) {
@@ -266,6 +268,17 @@ export default function App() {
 
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-black/40 backdrop-blur-xl border-b border-white/10 z-10 flex items-center px-6 shadow-lg shadow-cyan-500/5">
+        <button
+          onClick={() => setIsSidebarOpen((v) => !v)}
+          aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+          className="mr-3 text-slate-400 hover:text-slate-200 transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+        >
+          {isSidebarOpen ? (
+            <PanelLeftClose className="w-5 h-5" aria-hidden />
+          ) : (
+            <PanelLeftOpen className="w-5 h-5" aria-hidden />
+          )}
+        </button>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 via-cyan-500 to-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
             <span className="text-black">MR</span>
@@ -290,6 +303,7 @@ export default function App() {
       <div className="flex w-full pt-16 relative z-0">
         {/* Sidebar */}
         <ConversationList
+          isOpen={isSidebarOpen}
           conversations={conversations}
           selectedConversationId={selectedConversationId ?? ""}
           onSelectConversation={handleSelectConversation}
