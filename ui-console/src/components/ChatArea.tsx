@@ -8,8 +8,18 @@ import {
   Check,
   RotateCcw,
   Pencil,
+  Plus,
+  Paperclip,
+  X,
+  FileText,
 } from "lucide-react";
 import { MessageContent } from "./MessageContent";
+
+interface PendingAttachment {
+  id: string;
+  file: File;
+  previewUrl?: string; // only set for images
+}
 
 interface ChatAreaProps {
   conversation: Conversation | null;
@@ -123,10 +133,45 @@ export function ChatArea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const inputWrapperRef = useRef<HTMLDivElement | null>(null);
   const prevRectRef = useRef<DOMRect | null>(null);
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const attachMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const messages = conversation?.messages ?? [];
 
   const [hasStarted, setHasStarted] = useState(messages.length > 0);
+
+  useEffect(() => {
+    if (!isAttachMenuOpen) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!attachMenuRef.current?.contains(e.target as Node)) {
+        setIsAttachMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsAttachMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAttachMenuOpen]);
+
+  useEffect(() => {
+    return () => {
+      pendingAttachments.forEach((a) => {
+        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      });
+    };
+  }, []);
 
   useEffect(() => {
     setHasStarted((conversation?.messages?.length ?? 0) > 0);
@@ -210,18 +255,38 @@ export function ChatArea({
   };
 
   const handleEditClick = (text: string) => {
-  triggerStart(); 
-  setInputValue(text);
+    triggerStart();
+    setInputValue(text);
 
-  requestAnimationFrame(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.focus();
-    const len = el.value.length;
-    el.setSelectionRange(len, len);
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-  });
-};
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  const handleFilesSelected = (files: FileList | null) => {
+    if (!files) return;
+    const next: PendingAttachment[] = Array.from(files).map((file) => ({
+      id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      previewUrl: file.type.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : undefined,
+    }));
+    setPendingAttachments((prev) => [...prev, ...next]);
+  };
+
+  const removeAttachment = (id: string) => {
+    setPendingAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  };
 
   return (
     <main className="flex-1 flex flex-col bg-black/10 backdrop-blur-xl">
@@ -348,10 +413,93 @@ export function ChatArea({
             ref={inputWrapperRef}
             className="w-full max-w-2xl pointer-events-auto"
           >
+            {pendingAttachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2 px-1">
+                {pendingAttachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="relative flex items-center gap-2 bg-slate-800/80 border border-white/10 rounded-xl px-2 py-1.5 pr-7"
+                  >
+                    {att.previewUrl ? (
+                      <img
+                        src={att.previewUrl}
+                        alt={att.file.name}
+                        className="w-8 h-8 object-cover rounded-lg"
+                      />
+                    ) : (
+                      <FileText
+                        className="w-4 h-4 text-slate-400"
+                        aria-hidden
+                      />
+                    )}
+                    <span className="text-xs text-slate-300 max-w-[120px] truncate">
+                      {att.file.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(att.id)}
+                      aria-label={`Remove ${att.file.name}`}
+                      className="absolute right-1.5 top-1.5 text-slate-400 hover:text-slate-100"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <form
               onSubmit={handleSubmit}
-              className="flex items-end gap-3 rounded-3xl bg-slate-900/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-indigo-400/20 shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_24px_-4px_rgba(99,102,241,0.25)] transition-shadow focus-within:ring-indigo-400/40 focus-within:shadow-[0_0_0_1px_rgba(99,102,241,0.15),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_32px_-2px_rgba(99,102,241,0.35)]"
+              className="flex items-center gap-3 rounded-3xl bg-slate-900/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-indigo-400/20 shadow-[...] transition-shadow focus-within:ring-indigo-400/40 focus-within:shadow-[...]"
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handleFilesSelected(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <div ref={attachMenuRef} className="relative flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsAttachMenuOpen((v) => !v)}
+                  aria-label="Add attachment"
+                  aria-expanded={isAttachMenuOpen}
+                  className={`w-9 h-9 p-0 leading-none flex-shrink-0 inline-flex items-center justify-center rounded-full transition-all ${
+                    isAttachMenuOpen
+                      ? "bg-white/10 text-slate-100 rotate-45"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                  }`}
+                >
+                  <Plus className="w-4 h-4 block" aria-hidden />
+                </button>
+
+                {isAttachMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute bottom-full left-0 mb-2 w-48 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl shadow-black/40 p-1.5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-150"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsAttachMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className="w-full flex items-center gap-2.5 text-left text-sm text-slate-200 hover:bg-white/5 rounded-xl px-3 py-2 transition-colors"
+                    >
+                      <Paperclip
+                        className="w-4 h-4 text-slate-400"
+                        aria-hidden
+                      />
+                      Upload file
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex-1 relative">
                 <label htmlFor="chat-input" className="sr-only">
                   Message
