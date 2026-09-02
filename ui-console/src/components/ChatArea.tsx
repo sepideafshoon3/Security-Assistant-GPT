@@ -13,6 +13,7 @@ import {
   X,
   FileText,
   AlertCircle,
+  ChevronDown,
 } from "lucide-react";
 import { MessageContent } from "./MessageContent";
 
@@ -133,7 +134,9 @@ export function ChatArea({
   const [greeting] = useState(pickGreeting);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const inputWrapperRef = useRef<HTMLDivElement | null>(null);
   const prevRectRef = useRef<DOMRect | null>(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
@@ -179,10 +182,18 @@ export function ChatArea({
   useEffect(() => {
     setHasStarted((conversation?.messages?.length ?? 0) > 0);
     prevRectRef.current = null;
+    setShowScrollButton(false);
   }, [conversation?.id]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleMessagesScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollButton(distanceFromBottom > 150);
   };
 
   useEffect(() => {
@@ -328,6 +339,8 @@ export function ChatArea({
       {/* Messages + floating input host */}
       <div className="relative flex-1 overflow-hidden">
         <div
+          ref={messagesContainerRef}
+          onScroll={handleMessagesScroll}
           role="log"
           aria-live="polite"
           aria-relevant="additions"
@@ -429,6 +442,19 @@ export function ChatArea({
 
           <div ref={messagesEndRef} />
         </div>
+         {showScrollButton && (
+          <button
+            type="button"
+            onClick={() => {
+              scrollToBottom();
+              setShowScrollButton(false);
+            }}
+            aria-label="Scroll to latest message"
+            className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-slate-800/90 backdrop-blur-xl border border-white/10 text-slate-300 hover:text-white hover:bg-slate-700/90 shadow-lg flex items-center justify-center transition-all motion-safe:animate-in motion-safe:fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          >
+            <ChevronDown className="w-4 h-4" aria-hidden />
+          </button>
+        )}
 
         {/* Greeting + input, stacked as one column */}
         <div
