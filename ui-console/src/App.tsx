@@ -109,6 +109,9 @@ export default function App() {
   const selectedConversation = conversations.find(
     (c) => c.id === selectedConversationId,
   );
+  const [processingConversationId, setProcessingConversationId] = useState<
+    string | null
+  >(null);
 
   // --- on mount: لیست کانورسیشن‌ها رو از بک‌اند بگیر ---
   useEffect(() => {
@@ -163,7 +166,6 @@ export default function App() {
     if (!current) {
       const tempId = `tmp-${Date.now()}`;
 
-      // Optimistic: show user message immediately with a temporary conversation
       const tempConv: Conversation = {
         id: tempId,
         title: "New Conversation",
@@ -172,9 +174,9 @@ export default function App() {
         messages: [userMessage],
       };
 
-      // قبلی‌ها رو نگه دار، این جدید رو اضافه کن
       setConversations((prev) => [...prev, tempConv]);
       setSelectedConversationId(tempId);
+      setProcessingConversationId(tempId); // ADDED
 
       setIsLoading(true);
       try {
@@ -196,7 +198,6 @@ export default function App() {
         };
 
         setConversations((prev) => {
-          // temp کانورسیشن رو بردار و تا جاش نسخه نهایی رو بگذار
           const others = prev.filter((c) => c.id !== tempId);
           return [...others, finalConv];
         });
@@ -220,6 +221,7 @@ export default function App() {
         );
       } finally {
         setIsLoading(false);
+        setProcessingConversationId(null); // ADDED
       }
 
       return;
@@ -227,7 +229,6 @@ export default function App() {
 
     // ===== EXISTING CONVERSATION BRANCH =====
 
-    // Optimistic update: add user message immediately
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === current.id
@@ -241,6 +242,7 @@ export default function App() {
       ),
     );
 
+    setProcessingConversationId(current.id); // ADDED
     setIsLoading(true);
     try {
       const resp = await sendMessageToBackend(current.id, trimmed);
@@ -258,7 +260,7 @@ export default function App() {
           conv.id === current.id
             ? {
                 ...conv,
-                id: resp.conversation_id, // در صورت تغییر id از سمت بک‌اند
+                id: resp.conversation_id,
                 messages: [...conv.messages, ...assistantMessages],
                 lastMessage: lastAssistantText,
                 timestamp: new Date(),
@@ -286,6 +288,7 @@ export default function App() {
       );
     } finally {
       setIsLoading(false);
+      setProcessingConversationId(null); // ADDED
     }
   };
   const handleSelectConversation = (conversationId: string) => {
@@ -352,6 +355,7 @@ export default function App() {
           selectedConversationId={selectedConversationId ?? ""}
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
+          processingConversationId={processingConversationId}
         />
 
         {/* Chat Area */}

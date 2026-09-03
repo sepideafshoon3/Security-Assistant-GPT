@@ -8,14 +8,33 @@ interface ConversationListProps {
   onSelectConversation: (id: string) => void;
   onNewConversation: () => void;
   isOpen: boolean;
+  processingConversationId: string | null;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
 
-const STATUS_STYLES: Record<ConversationStatus, { dot: string; label: string }> = {
-  clean: { dot: "bg-emerald-500", label: "No open findings" },
-  findings: { dot: "bg-amber-500", label: "Has findings" },
-  critical: { dot: "bg-red-500", label: "Critical finding" },
+const STATUS_STYLES: Record<
+  ConversationStatus,
+  { fill: string; ring: string; border: string; label: string }
+> = {
+  clean: {
+    fill: "bg-emerald-500",
+    ring: "ring-2 ring-emerald-500/30",
+    border: "border-emerald-500/60",
+    label: "No open findings",
+  },
+  findings: {
+    fill: "bg-amber-500",
+    ring: "ring-2 ring-amber-500/30",
+    border: "border-amber-500/60",
+    label: "Has findings",
+  },
+  critical: {
+    fill: "bg-red-500",
+    ring: "ring-2 ring-red-500/30",
+    border: "border-red-500/60",
+    label: "Critical finding",
+  },
 };
 
 export function ConversationList({
@@ -24,6 +43,7 @@ export function ConversationList({
   onSelectConversation,
   onNewConversation,
   isOpen,
+  processingConversationId,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
 
@@ -89,11 +109,13 @@ export function ConversationList({
           {filtered.map((conversation) => {
             const status = STATUS_STYLES[conversation.status ?? "clean"];
             const isSelected = selectedConversationId === conversation.id;
+            const isActive = processingConversationId === conversation.id;
+
             return (
               <button
                 key={conversation.id}
                 onClick={() => onSelectConversation(conversation.id)}
-                title={status.label}
+                title={isActive ? "Agent is working..." : status.label}
                 className={`w-full p-4 border-b border-white/5 hover:bg-white/5 transition-colors text-left ${
                   isSelected
                     ? "bg-indigo-500/10 border-l-2 border-l-indigo-400"
@@ -102,7 +124,11 @@ export function ConversationList({
               >
                 <div className="flex items-center gap-2 mb-1.5">
                   <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`}
+                    className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
+                      isActive
+                        ? `${status.fill} ${status.ring} animate-pulse`
+                        : `bg-transparent border-2 ${status.border}`
+                    }`}
                     aria-hidden
                   />
                   <h3 className="text-slate-100 text-sm truncate flex-1">
