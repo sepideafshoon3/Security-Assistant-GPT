@@ -49,14 +49,16 @@ export function ConversationList({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.lastMessage.toLowerCase().includes(q),
-    );
+    return conversations
+      .filter(
+        (c) =>
+          !q ||
+          c.title.toLowerCase().includes(q) ||
+          c.lastMessage.toLowerCase().includes(q),
+      )
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [conversations, query]);
-
+  
   const formatTime = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -64,6 +66,7 @@ export function ConversationList({
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
+    if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes}m`;
     if (hours < 24) return `${hours}h`;
     return `${days}d`;
