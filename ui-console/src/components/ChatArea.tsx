@@ -168,6 +168,7 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
               onCopy={handleCopy}
               onResend={onResendMessage}
               onEdit={handleEditClick}
+              disabled={isLoading}
             />
           ))}
 
