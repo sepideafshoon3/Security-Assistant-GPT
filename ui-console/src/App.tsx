@@ -25,7 +25,7 @@ export interface Conversation {
   lastMessage: string;
   timestamp: Date;
   messages: Message[];
-  status?: "clean" | "findings" | "critical"; // TODO: source from backend scan results
+  status?: "clean" | "findings" | "critical"; 
 }
 
 function deriveStatus(text: string): Conversation["status"] {
@@ -35,9 +35,7 @@ function deriveStatus(text: string): Conversation["status"] {
   return "clean";
 }
 
-/**
- * مپ کردن خلاصه‌ی کانورسیشن بک‌اند به مدل فرانت.
- */
+
 function mapBackendConversationToConversation(
   summary: BackendConversationSummary,
 ): Conversation {
@@ -66,7 +64,7 @@ function mapBackendConversationToConversation(
 function mapBackendToMessages(resp: BackendChatResponse): Message[] {
   const now = Date.now();
 
-  // Preferred: backend sends an array of messages
+
   if (
     resp.messages &&
     Array.isArray(resp.messages) &&
@@ -80,7 +78,6 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
     }));
   }
 
-  // Fallback: current backend only sends a single "reply" string
   if (resp.reply) {
     return [
       {
@@ -92,12 +89,11 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
     ];
   }
 
-  // No messages in response
   return [];
 }
 
 export default function App() {
-  // حالا چند کانورسیشن رو تو state نگه می‌داریم، نه فقط یکی.
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
@@ -109,11 +105,21 @@ export default function App() {
   const selectedConversation = conversations.find(
     (c) => c.id === selectedConversationId,
   );
-  const [processingConversationId, setProcessingConversationId] = useState<
-    string | null
-  >(null);
 
-  // --- on mount: لیست کانورسیشن‌ها رو از بک‌اند بگیر ---
+  const [processingConversationIds, setProcessingConversationIds] = useState<
+    Set<string>
+  >(new Set());
+
+  const markProcessing = (id: string) =>
+    setProcessingConversationIds((prev) => new Set(prev).add(id));
+
+  const unmarkProcessing = (id: string) =>
+    setProcessingConversationIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
@@ -137,7 +143,6 @@ export default function App() {
     load();
   }, []);
 
-  // "New Chat" button: فقط کانورسیشن جدید شروع کن؛ قبلی‌ها رو پاک نکن.
   const handleNewConversation = () => {
     setError(null);
     setErrorRetry(null);
@@ -145,7 +150,6 @@ export default function App() {
     setSelectedConversationId(null);
   };
 
-  // SEND MESSAGE: handles both new and existing conversations.
   const handleSendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -162,7 +166,6 @@ export default function App() {
 
     const current = selectedConversation;
 
-    // ===== NEW CONVERSATION BRANCH =====
     if (!current) {
       const tempId = `tmp-${Date.now()}`;
 
@@ -176,7 +179,7 @@ export default function App() {
 
       setConversations((prev) => [...prev, tempConv]);
       setSelectedConversationId(tempId);
-      setProcessingConversationId(tempId); // ADDED
+      markProcessing(tempId);
 
       setIsLoading(true);
       try {
@@ -221,13 +224,12 @@ export default function App() {
         );
       } finally {
         setIsLoading(false);
-        setProcessingConversationId(null); // ADDED
+        unmarkProcessing(tempId);
       }
 
       return;
     }
 
-    // ===== EXISTING CONVERSATION BRANCH =====
 
     setConversations((prev) =>
       prev.map((conv) =>
@@ -242,7 +244,7 @@ export default function App() {
       ),
     );
 
-    setProcessingConversationId(current.id); // ADDED
+    markProcessing(current.id);
     setIsLoading(true);
     try {
       const resp = await sendMessageToBackend(current.id, trimmed);
@@ -288,7 +290,7 @@ export default function App() {
       );
     } finally {
       setIsLoading(false);
-      setProcessingConversationId(null); // ADDED
+      unmarkProcessing(current.id);
     }
   };
   const handleSelectConversation = (conversationId: string) => {
@@ -302,7 +304,6 @@ export default function App() {
     const target = conv.messages.find((m) => m.id === messageId);
     if (!target) return;
 
-    // Remove the old (possibly failed) copy before sending a fresh one
     setConversations((prev) =>
       prev.map((c) =>
         c.id === conv.id
@@ -355,7 +356,7 @@ export default function App() {
           selectedConversationId={selectedConversationId ?? ""}
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
-          processingConversationId={processingConversationId}
+          processingConversationIds={processingConversationIds}
         />
 
         {/* Chat Area */}

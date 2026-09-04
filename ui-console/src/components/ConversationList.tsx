@@ -8,7 +8,7 @@ interface ConversationListProps {
   onSelectConversation: (id: string) => void;
   onNewConversation: () => void;
   isOpen: boolean;
-  processingConversationId: string | null;
+  processingConversationIds: Set<string>;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
@@ -43,7 +43,7 @@ export function ConversationList({
   onSelectConversation,
   onNewConversation,
   isOpen,
-  processingConversationId,
+  processingConversationIds,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
 
@@ -58,7 +58,7 @@ export function ConversationList({
       )
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [conversations, query]);
-  
+
   const formatTime = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -112,8 +112,7 @@ export function ConversationList({
           {filtered.map((conversation) => {
             const status = STATUS_STYLES[conversation.status ?? "clean"];
             const isSelected = selectedConversationId === conversation.id;
-            const isActive = processingConversationId === conversation.id;
-
+            const isActive = processingConversationIds.has(conversation.id); 
             return (
               <button
                 key={conversation.id}
