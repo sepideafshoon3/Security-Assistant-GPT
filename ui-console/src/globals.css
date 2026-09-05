@@ -3,113 +3,120 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
+  
+  --color-brand-light: #00A6FB;
+  --color-brand-primary: #0582CA;
+  --color-brand-dark: #006494;
+  --color-brand-navy: #003554;
+  --color-brand-deep: #051923;
+
+  /* LIGHT MODE (Ice-Blue & Pure White) */
+  --background: #f0f8ff;
+  --foreground: #051923;
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
+  --card-foreground: #051923;
+  --popover: #ffffff;
+  --popover-foreground: #051923;
+  --primary: #0582CA;
+  --primary-foreground: #ffffff;
+  --secondary: #e0f2fe;
+  --secondary-foreground: #003554;
+  --muted: #e0f2fe;
+  --muted-foreground: #006494;
+  --accent: #0582CA;
+  --accent-foreground: #ffffff;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
+  --border: rgba(0, 100, 148, 0.15);
   --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
+  --input-background: #ffffff;
+  --switch-background: #bae6fd;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --ring: #00A6FB;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  
+  --sidebar: #e6f4fe;
+  --sidebar-foreground: #051923;
+  --sidebar-primary: #0582CA;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #bae6fd;
+  --sidebar-accent-foreground: #051923;
+  --sidebar-border: rgba(0, 100, 148, 0.15);
+  --sidebar-ring: #00A6FB;
 
-  /* Accent (primary interactive color across the chat UI) */
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-strong: #a5b4fc;
-  --accent-soft: rgba(99, 102, 241, 0.1);
-  --accent-glow: rgba(99, 102, 241, 0.6);
+  --accent-hover: #00A6FB;
+  --accent-strong: #006494;
+  --accent-soft: rgba(5, 130, 202, 0.12);
+  --accent-glow: rgba(0, 166, 251, 0.3);
 
-  /* Status colors (conversation health, errors) */
   --status-success: #10b981;
   --status-warning: #f59e0b;
   --status-danger: #ef4444;
   --status-danger-strong: #f87171;
 
-  /* Text hierarchy on the chat surface (always-dark, independent of light/dark mode) */
+  --fg-primary: #051923;
+  --fg-secondary: #003554;
+  --fg-tertiary: #006494;
+  --fg-faint: #0582CA;
+
+  --surface-elevated: #ffffff;
+  --surface-panel: #ffffff;
+  --surface-deep: #f0f8ff;
+
+  --surface-danger: #fef2f2;
+  --border-danger: rgba(239, 68, 68, 0.3);
+  --fg-danger: #991b1b;
+
+  --brand-cyan: #00A6FB;
+  --brand-green: #006494;
+}
+.dark {
+  /* DARK MODE SURFACE VARS (Pulls straight from chosen blue palette) */
+  --background: #020b10;
+  --foreground: #f1f5f9;
+  --card: #051923;
+  --card-foreground: #f1f5f9;
+  --popover: #051923;
+  --popover-foreground: #f1f5f9;
+  --primary: #00A6FB;
+  --primary-foreground: #020b10;
+  --secondary: #003554;
+  --secondary-foreground: #f1f5f9;
+  --muted: #003554;
+  --muted-foreground: #94a3b8;
+  --accent: #0582CA;
+  --accent-foreground: #ffffff;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 166, 251, 0.2);
+  --input: #003554;
+  --input-background: #003554;
+  --switch-background: #006494;
+  --ring: #00A6FB;
+  
+  --sidebar: #051923;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #00A6FB;
+  --sidebar-primary-foreground: #020b10;
+  --sidebar-accent: #003554;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: rgba(0, 166, 251, 0.15);
+  --sidebar-ring: #00A6FB;
+
+  /* Dark mode Surface Overrides */
   --fg-primary: #f1f5f9;
   --fg-secondary: #cbd5e1;
   --fg-tertiary: #94a3b8;
   --fg-faint: #64748b;
 
-  /* Dark chrome surfaces (sidebar, panels) */
-  --surface-elevated: #1e293b;
-  --surface-panel: #0f172a;
-  --surface-deep: #020617;
+  --surface-elevated: #003554;
+  --surface-panel: #051923;
+  --surface-deep: #020b10;
 
-  /* Error banner surface */
   --surface-danger: rgba(69, 10, 10, 0.9);
   --border-danger: rgba(239, 68, 68, 0.3);
   --fg-danger: #fee2e2;
-
-  /* Brand mark gradient (header logo) */
-  --brand-cyan: #22d3ee;
-  --brand-green: #4ade80;
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
 }
 
 @theme inline {
@@ -134,11 +141,6 @@
   --color-input-background: var(--input-background);
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -152,7 +154,6 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
@@ -181,61 +182,6 @@
 
   body {
     @apply bg-background text-foreground;
-  }
-}
-
-/**
- * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
- */
-@layer base {
-  :where(:not(:has([class*=' text-']), :not(:has([class^='text-'])))) {
-    h1 {
-      font-size: var(--text-2xl);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    h2 {
-      font-size: var(--text-xl);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    h3 {
-      font-size: var(--text-lg);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    h4 {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    p {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-normal);
-      line-height: 1.5;
-    }
-
-    label {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    button {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-medium);
-      line-height: 1.5;
-    }
-
-    input {
-      font-size: var(--text-base);
-      font-weight: var(--font-weight-normal);
-      line-height: 1.5;
-    }
   }
 }
 

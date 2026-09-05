@@ -15,7 +15,12 @@ interface ChatAreaProps {
   isLoading?: boolean;
 }
 
-export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoading }: ChatAreaProps) {
+export function ChatArea({
+  conversation,
+  onSendMessage,
+  onResendMessage,
+  isLoading,
+}: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -121,8 +126,8 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
   };
 
   return (
-    <main className="flex-1 flex flex-col bg-black/10 backdrop-blur-xl">
-      <div className="h-16 bg-black/30 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-6 shadow-lg">
+    <main className="flex-1 flex flex-col bg-background relative">
+      <div className="h-16 bg-surface-elevated/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-6 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
             <span className="text-white">AI</span>
@@ -130,7 +135,9 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
           <div>
             <h2 className="text-fg-primary">Security Assistant</h2>
             <p className="text-xs text-status-success flex items-center gap-1">
-              <span className="motion-safe:animate-pulse" aria-hidden>●</span>
+              <span className="motion-safe:animate-pulse" aria-hidden>
+                ●
+              </span>
               {conversation ? "Active" : "Waiting for first message"}
             </p>
           </div>
@@ -138,13 +145,13 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
         <div className="flex items-center gap-2">
           <button
             aria-label="Delete conversation"
-            className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
+            className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-secondary rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
           >
             <Trash2 className="w-5 h-5" aria-hidden />
           </button>
           <button
             aria-label="More options"
-            className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
+            className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-secondary rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
           >
             <MoreVertical className="w-5 h-5" aria-hidden />
           </button>
@@ -194,7 +201,10 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
         >
           {!hasStarted && <Greeting />}
 
-          <div ref={inputWrapperRef} className="w-full max-w-2xl pointer-events-auto">
+          <div
+            ref={inputWrapperRef}
+            className="w-full max-w-2xl pointer-events-auto"
+          >
             <ChatInput
               value={inputValue}
               onChange={setInputValue}

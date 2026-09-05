@@ -37,7 +37,7 @@ export function MessageBubble({
           "max-w-[70%] min-w-0 break-words rounded-2xl px-5 py-3.5 transition-all",
           isUser
             ? "bg-accent text-white shadow-lg shadow-accent/20"
-            : "bg-white/5 backdrop-blur-md border border-white/10 text-fg-primary shadow-xl",
+            : "bg-surface-elevated border border-border text-fg-primary shadow-md",
           message.failed && "ring-2 ring-status-danger/60",
         )}
       >
