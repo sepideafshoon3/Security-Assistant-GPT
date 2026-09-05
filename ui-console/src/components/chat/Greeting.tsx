@@ -44,8 +44,8 @@ export function Greeting() {
   const [greeting] = useState(pickGreeting);
   return (
     <div className="text-center max-w-md mb-6 motion-safe:animate-in motion-safe:fade-in duration-500">
-      <h2 className="text-2xl text-slate-100 mb-2">{greeting.title}</h2>
-      <p className="text-slate-400">{greeting.subtitle}</p>
+      <h2 className="text-2xl text-fg-primary mb-2">{greeting.title}</h2>
+      <p className="text-fg-tertiary">{greeting.subtitle}</p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 // src/App.tsx
-import { PanelLeftClose, PanelLeftOpen, Sun, Moon } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
@@ -324,7 +324,7 @@ export default function App() {
         <button
           onClick={() => setIsSidebarOpen((v) => !v)}
           aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-          className="mr-3 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          className="mr-3 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
         >
           {isSidebarOpen ? (
             <PanelLeftClose className="w-5 h-5" aria-hidden />
@@ -333,10 +333,10 @@ export default function App() {
           )}
         </button>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 via-cyan-500 to-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
+          <div className="w-10 h-10 bg-gradient-to-br from-brand-cyan to-brand-green rounded-xl flex items-center justify-center shadow-lg shadow-brand-cyan/50">
             <span className="text-black">MR</span>
           </div>
-          <h1 className="text-cyan-400 tracking-wider bg-gradient-to-r from-cyan-500 to-green-500 dark:from-cyan-400 dark:to-green-400 bg-clip-text text-transparent">
+          <h1 className="tracking-wider bg-gradient-to-r from-brand-cyan to-brand-green bg-clip-text text-transparent">
             MR_ROBOT://CHAT
           </h1>
         </div>

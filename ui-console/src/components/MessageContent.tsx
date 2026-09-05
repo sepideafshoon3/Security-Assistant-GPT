@@ -166,20 +166,20 @@ function markdownToText(text: string): string {
           >
             {/* هدر کد (زبان + دکمه کپی) */}
             <div className="flex items-center justify-between px-3 py-2 text-xs bg-black/60 border-b border-white/10">
-              <span className="font-mono text-cyan-300/80">
+              <span className="font-mono text-brand-cyan/80">
                 {block.language || "code"}
               </span>
               <button
                 type="button"
                 onClick={() => handleCopy(block.content, index)}
-                className="px-2 py-1 rounded-md border border-white/10 text-[10px] uppercase tracking-wider text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                className="px-2 py-1 rounded-md border border-white/10 text-[10px] uppercase tracking-wider text-fg-secondary hover:text-white hover:bg-white/5 transition-colors"
               >
                 {copiedBlockIndex === index ? "Copied" : "Copy"}
               </button>
             </div>
 
             {/* خود کد */}
-            <pre className="max-h-[460px] overflow-auto p-3 text-xs md:text-sm bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+            <pre className="max-h-[460px] overflow-auto p-3 text-xs md:text-sm bg-gradient-to-br from-surface-deep via-surface-panel to-surface-deep">
               <code className="font-mono text-cyan-100 whitespace-pre">
                 {block.content}
               </code>
