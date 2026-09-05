@@ -6,6 +6,7 @@ import { MessageBubble } from "./chat/MessageBubble";
 import { TypingIndicator } from "./chat/TypingIndicator";
 import { ScrollToBottomButton } from "./chat/ScrollToBottomButton";
 import { ChatInput } from "./chat/ChatInput";
+import { cn } from "./ui/utils";
 
 interface ChatAreaProps {
   conversation: Conversation | null;
@@ -123,12 +124,12 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
     <main className="flex-1 flex flex-col bg-black/10 backdrop-blur-xl">
       <div className="h-16 bg-black/30 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-6 shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
             <span className="text-white">AI</span>
           </div>
           <div>
-            <h2 className="text-slate-100">Security Assistant</h2>
-            <p className="text-xs text-emerald-400 flex items-center gap-1">
+            <h2 className="text-fg-primary">Security Assistant</h2>
+            <p className="text-xs text-status-success flex items-center gap-1">
               <span className="motion-safe:animate-pulse" aria-hidden>●</span>
               {conversation ? "Active" : "Waiting for first message"}
             </p>
@@ -137,13 +138,13 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
         <div className="flex items-center gap-2">
           <button
             aria-label="Delete conversation"
-            className="text-slate-400 hover:text-slate-200 transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
           >
             <Trash2 className="w-5 h-5" aria-hidden />
           </button>
           <button
             aria-label="More options"
-            className="text-slate-400 hover:text-slate-200 transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
           >
             <MoreVertical className="w-5 h-5" aria-hidden />
           </button>
@@ -186,9 +187,10 @@ export function ChatArea({ conversation, onSendMessage, onResendMessage, isLoadi
         />
 
         <div
-          className={`absolute inset-x-0 top-0 bottom-0 flex flex-col items-center px-6 pointer-events-none ${
-            hasStarted ? "justify-end pb-6" : "justify-center pb-24"
-          }`}
+          className={cn(
+            "absolute inset-x-0 top-0 bottom-0 flex flex-col items-center px-6 pointer-events-none",
+            hasStarted ? "justify-end pb-6" : "justify-center pb-24",
+          )}
         >
           {!hasStarted && <Greeting />}
 

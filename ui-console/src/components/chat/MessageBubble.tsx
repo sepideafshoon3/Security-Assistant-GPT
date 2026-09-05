@@ -3,6 +3,7 @@ import { Copy, Check, RotateCcw, Pencil, AlertCircle } from "lucide-react";
 import { IconButton } from "../IconButton";
 import { MessageContent } from "../MessageContent";
 import { formatRelativeTime } from "../../utils/time";
+import { cn } from "../ui/utils";
 
 interface MessageBubbleProps {
   message: Message;
@@ -25,16 +26,20 @@ export function MessageBubble({
 
   return (
     <div
-      className={`group flex flex-col min-w-0 ${
-        isUser ? "items-end" : "items-start"
-      } motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-300`}
+      className={cn(
+        "group flex flex-col min-w-0",
+        isUser ? "items-end" : "items-start",
+        "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-300",
+      )}
     >
       <div
-        className={`max-w-[70%] ${
+        className={cn(
+          "max-w-[70%] min-w-0 break-words rounded-2xl px-5 py-3.5 transition-all",
           isUser
-            ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-            : "bg-white/5 backdrop-blur-md border border-white/10 text-gray-100 shadow-xl"
-        } ${message.failed ? "ring-2 ring-red-500/60" : ""} min-w-0 break-words rounded-2xl px-5 py-3.5 transition-all`}
+            ? "bg-accent text-white shadow-lg shadow-accent/20"
+            : "bg-white/5 backdrop-blur-md border border-white/10 text-fg-primary shadow-xl",
+          message.failed && "ring-2 ring-status-danger/60",
+        )}
       >
         <span className="sr-only">
           {isUser ? "You said: " : "Assistant said: "}
@@ -44,15 +49,15 @@ export function MessageBubble({
 
       {message.failed && (
         <div className="flex items-center gap-1.5 mt-1 px-1">
-          <AlertCircle className="w-3.5 h-3.5 text-red-400" aria-hidden />
-          <span className="text-xs text-red-400">
+          <AlertCircle className="w-3.5 h-3.5 text-status-danger-strong" aria-hidden />
+          <span className="text-xs text-status-danger-strong">
             Failed to send — hover to retry
           </span>
         </div>
       )}
 
       <div className="flex items-center gap-3 h-0 group-hover:h-5 group-focus-within:h-5 overflow-hidden transition-all duration-150 mt-1 px-1">
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-fg-faint">
           {formatRelativeTime(message.timestamp)}
         </span>
         {isUser && (
@@ -60,7 +65,6 @@ export function MessageBubble({
             aria-label="Resend message"
             onClick={() => onResend(message.id)}
             disabled={disabled}
-            className={`... ${disabled ? "opacity-30 pointer-events-none" : ""}`}
           >
             <RotateCcw className="w-3.5 h-3.5" aria-hidden />
           </IconButton>
@@ -70,7 +74,6 @@ export function MessageBubble({
             aria-label="Edit message"
             onClick={() => onEdit(message.text)}
             disabled={disabled}
-            className={`... ${disabled ? "opacity-30 pointer-events-none" : ""}`}
           >
             <Pencil className="w-3.5 h-3.5" aria-hidden />
           </IconButton>
