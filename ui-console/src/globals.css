@@ -40,18 +40,39 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  
-  /* Mr. Robot Theme Colors - Darker Version */
-  --neon-cyan: #06b6d4;
-  --neon-cyan-light: #22d3ee;
-  --neon-cyan-dark: #0891b2;
-  --neon-green: #10b981;
-  --neon-green-light: #34d399;
-  --neon-green-dark: #059669;
-  --glass-bg: rgba(0, 0, 0, 0.4);
-  --glass-border: rgba(6, 182, 212, 0.15);
-  --dark-bg: #020617;
-  --darker-bg: #010409;
+
+  /* Accent (primary interactive color across the chat UI) */
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-strong: #a5b4fc;
+  --accent-soft: rgba(99, 102, 241, 0.1);
+  --accent-glow: rgba(99, 102, 241, 0.6);
+
+  /* Status colors (conversation health, errors) */
+  --status-success: #10b981;
+  --status-warning: #f59e0b;
+  --status-danger: #ef4444;
+  --status-danger-strong: #f87171;
+
+  /* Text hierarchy on the chat surface (always-dark, independent of light/dark mode) */
+  --fg-primary: #f1f5f9;
+  --fg-secondary: #cbd5e1;
+  --fg-tertiary: #94a3b8;
+  --fg-faint: #64748b;
+
+  /* Dark chrome surfaces (sidebar, panels) */
+  --surface-elevated: #1e293b;
+  --surface-panel: #0f172a;
+  --surface-deep: #020617;
+
+  /* Error banner surface */
+  --surface-danger: rgba(69, 10, 10, 0.9);
+  --border-danger: rgba(239, 68, 68, 0.3);
+  --fg-danger: #fee2e2;
+
+  /* Brand mark gradient (header logo) */
+  --brand-cyan: #22d3ee;
+  --brand-green: #4ade80;
 }
 
 .dark {
@@ -130,18 +151,27 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  
-  /* Mr. Robot Theme Colors */
-  --color-neon-cyan: var(--neon-cyan);
-  --color-neon-cyan-light: var(--neon-cyan-light);
-  --color-neon-cyan-dark: var(--neon-cyan-dark);
-  --color-neon-green: var(--neon-green);
-  --color-neon-green-light: var(--neon-green-light);
-  --color-neon-green-dark: var(--neon-green-dark);
-  --color-glass-bg: var(--glass-bg);
-  --color-glass-border: var(--glass-border);
-  --color-dark-bg: var(--dark-bg);
-  --color-darker-bg: var(--darker-bg);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-strong: var(--status-danger-strong);
+  --color-fg-primary: var(--fg-primary);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-tertiary: var(--fg-tertiary);
+  --color-fg-faint: var(--fg-faint);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-deep: var(--surface-deep);
+  --color-surface-danger: var(--surface-danger);
+  --color-border-danger: var(--border-danger);
+  --color-fg-danger: var(--fg-danger);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-brand-green: var(--brand-green);
 }
 
 @layer base {
