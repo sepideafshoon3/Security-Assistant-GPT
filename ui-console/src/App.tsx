@@ -1,9 +1,10 @@
 // src/App.tsx
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Sun, Moon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { useTheme } from "./hooks/useTheme";
 import {
   sendMessageToBackend,
   type BackendChatResponse,
@@ -25,7 +26,7 @@ export interface Conversation {
   lastMessage: string;
   timestamp: Date;
   messages: Message[];
-  status?: "clean" | "findings" | "critical"; 
+  status?: "clean" | "findings" | "critical"; // TODO: source from backend scan results
 }
 
 function deriveStatus(text: string): Conversation["status"] {
@@ -34,7 +35,6 @@ function deriveStatus(text: string): Conversation["status"] {
   if (/vulnerab|finding|semgrep|bandit|osv-scan/.test(t)) return "findings";
   return "clean";
 }
-
 
 function mapBackendConversationToConversation(
   summary: BackendConversationSummary,
@@ -64,7 +64,6 @@ function mapBackendConversationToConversation(
 function mapBackendToMessages(resp: BackendChatResponse): Message[] {
   const now = Date.now();
 
-
   if (
     resp.messages &&
     Array.isArray(resp.messages) &&
@@ -93,7 +92,7 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
 }
 
 export default function App() {
-
+  const { theme, toggleTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
@@ -105,7 +104,6 @@ export default function App() {
   const selectedConversation = conversations.find(
     (c) => c.id === selectedConversationId,
   );
-
   const [processingConversationIds, setProcessingConversationIds] = useState<
     Set<string>
   >(new Set());
@@ -230,7 +228,6 @@ export default function App() {
       return;
     }
 
-
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === current.id
@@ -293,6 +290,7 @@ export default function App() {
       unmarkProcessing(current.id);
     }
   };
+
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
   };
@@ -316,17 +314,17 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-gray-100 relative overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-white via-slate-50 to-white text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-gray-100 relative overflow-hidden transition-colors duration-300">
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-cyan-900/20 via-transparent to-transparent pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-green-900/20 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-cyan-100/40 dark:from-cyan-900/20 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-green-100/40 dark:from-green-900/20 via-transparent to-transparent pointer-events-none" />
 
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-black/40 backdrop-blur-xl border-b border-white/10 z-10 flex items-center px-6 shadow-lg shadow-cyan-500/5">
+      <div className="fixed top-0 left-0 right-0 h-16 bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 z-10 flex items-center px-6 shadow-lg shadow-cyan-500/5">
         <button
           onClick={() => setIsSidebarOpen((v) => !v)}
           aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-          className="mr-3 text-slate-400 hover:text-slate-200 transition-colors p-2 hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          className="mr-3 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
         >
           {isSidebarOpen ? (
             <PanelLeftClose className="w-5 h-5" aria-hidden />
@@ -338,18 +336,16 @@ export default function App() {
           <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 via-cyan-500 to-green-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/50">
             <span className="text-black">MR</span>
           </div>
-          <h1 className="text-cyan-400 tracking-wider bg-gradient-to-r from-cyan-400 to-green-400 bg-clip-text text-transparent">
+          <h1 className="text-cyan-400 tracking-wider bg-gradient-to-r from-cyan-500 to-green-500 dark:from-cyan-400 dark:to-green-400 bg-clip-text text-transparent">
             MR_ROBOT://CHAT
           </h1>
         </div>
 
-        {/* Loading indicator (errors now shown via ErrorBanner below) */}
         <div className="ml-auto flex items-center gap-4 text-xs" />
       </div>
 
       {/* Main Content */}
       <div className="flex w-full pt-16 relative z-0">
-        {/* Sidebar */}
         <ConversationList
           isOpen={isSidebarOpen}
           conversations={conversations}
@@ -357,9 +353,10 @@ export default function App() {
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
           processingConversationIds={processingConversationIds}
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
 
-        {/* Chat Area */}
         <ChatArea
           conversation={selectedConversation || null}
           onSendMessage={handleSendMessage}

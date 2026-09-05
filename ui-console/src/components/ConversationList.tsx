@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import type { Conversation } from "../App";
 import { Search, Plus } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
+
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -9,6 +11,8 @@ interface ConversationListProps {
   onNewConversation: () => void;
   isOpen: boolean;
   processingConversationIds: Set<string>;
+  theme: "light" | "dark";
+  toggleTheme: () => void;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
@@ -44,6 +48,8 @@ export function ConversationList({
   onNewConversation,
   isOpen,
   processingConversationIds,
+  theme,
+  toggleTheme,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
 
@@ -112,7 +118,7 @@ export function ConversationList({
           {filtered.map((conversation) => {
             const status = STATUS_STYLES[conversation.status ?? "clean"];
             const isSelected = selectedConversationId === conversation.id;
-            const isActive = processingConversationIds.has(conversation.id); 
+            const isActive = processingConversationIds.has(conversation.id);
             return (
               <button
                 key={conversation.id}
@@ -149,11 +155,35 @@ export function ConversationList({
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-white/10">
-          <div className="text-xs text-center text-slate-500">
+        <div className="p-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
+          <div className="text-xs text-slate-400 dark:text-slate-500">
             {conversations.length} conversation
             {conversations.length === 1 ? "" : "s"}
           </div>
+          <button
+            onClick={toggleTheme}
+            aria-label={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
+            className="relative w-8 h-8 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          >
+            <Sun
+              className={`w-4 h-4 absolute inset-0 m-auto transition-all duration-300 ${
+                theme === "dark"
+                  ? "opacity-100 rotate-0 scale-100"
+                  : "opacity-0 -rotate-90 scale-50"
+              }`}
+              aria-hidden
+            />
+            <Moon
+              className={`w-4 h-4 absolute inset-0 m-auto transition-all duration-300 ${
+                theme === "dark"
+                  ? "opacity-0 rotate-90 scale-50"
+                  : "opacity-100 rotate-0 scale-100"
+              }`}
+              aria-hidden
+            />
+          </button>
         </div>
       </div>
     </nav>
