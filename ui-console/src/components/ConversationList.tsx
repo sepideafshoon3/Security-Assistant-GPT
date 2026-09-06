@@ -11,6 +11,7 @@ interface ConversationListProps {
   isOpen: boolean;
   isMobile: boolean;
   onClose: () => void;
+  isLoadingConversations?: boolean;
   processingConversationIds: Set<string>;
   theme: "light" | "dark";
   toggleTheme: () => void;
@@ -50,6 +51,7 @@ export function ConversationList({
   isOpen,
   isMobile,
   onClose,
+  isLoadingConversations,
   processingConversationIds,
   theme,
   toggleTheme,
@@ -138,7 +140,7 @@ export function ConversationList({
             </div>
             <button
               onClick={handleNew}
-              className="w-full bg-accent hover:bg-accent-hover rounded-lg py-2.5 flex items-center justify-center gap-2 transition-colors"
+              className="w-full bg-accent hover:bg-accent-hover active:scale-[0.98] rounded-lg py-2.5 flex items-center justify-center gap-2 transition-all"
             >
               <Plus className="w-4 h-4 text-white" />
               <span className="text-white text-sm font-medium">New Review</span>
@@ -156,50 +158,71 @@ export function ConversationList({
           </div>
 
           {/* Conversations */}
-          <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 && (
-              <p className="text-sm text-fg-faint text-center mt-8">
-                No conversations found
-              </p>
-            )}
-            {filtered.map((conversation) => {
-              const status = STATUS_STYLES[conversation.status ?? "clean"];
-              const isSelected = selectedConversationId === conversation.id;
-              const isActive = processingConversationIds.has(conversation.id);
-              return (
-                <button
-                  key={conversation.id}
-                  onClick={() => handleSelect(conversation.id)}
-                  title={isActive ? "Agent is working..." : status.label}
-                  className={cn(
-                    "w-full p-4 border-b border-border/60 hover:bg-secondary transition-colors text-left",
-                    isSelected &&
-                      "bg-accent-soft border-l-2 border-l-accent-hover",
-                  )}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className={cn(
-                        "w-2 h-2 rounded-full shrink-0 transition-all duration-300",
-                        isActive
-                          ? cn(status.fill, status.ring, "animate-pulse")
-                          : cn("bg-transparent border-2", status.border),
-                      )}
-                      aria-hidden
-                    />
-                    <h3 className="text-fg-primary text-sm truncate flex-1">
-                      {conversation.title}
-                    </h3>
-                    <span className="text-xs text-fg-faint shrink-0">
-                      {formatTime(conversation.timestamp)}
-                    </span>
+          <div
+            className="flex-1 overflow-y-auto"
+            role="list"
+            aria-label="Conversation list"
+          >
+            {isLoadingConversations ? (
+              <div className="p-4 space-y-3" aria-hidden>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="animate-pulse space-y-2">
+                    <div className="h-3 w-2/3 rounded bg-secondary" />
+                    <div className="h-2.5 w-4/5 rounded bg-secondary/70" />
                   </div>
-                  <p className="text-sm text-fg-tertiary truncate pl-4">
-                    {conversation.lastMessage}
-                  </p>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="text-sm text-fg-faint text-center mt-8 px-4">
+                {conversations.length === 0
+                  ? "No reviews yet — start one below."
+                  : "No conversations match your search."}
+              </p>
+            ) : (
+              filtered.map((conversation) => {
+                const status = STATUS_STYLES[conversation.status ?? "clean"];
+                const isSelected =
+                  selectedConversationId === conversation.id;
+                const isActive = processingConversationIds.has(
+                  conversation.id,
+                );
+                return (
+                  <button
+                    key={conversation.id}
+                    role="listitem"
+                    aria-current={isSelected ? "true" : undefined}
+                    onClick={() => handleSelect(conversation.id)}
+                    title={isActive ? "Agent is working..." : status.label}
+                    className={cn(
+                      "w-full p-4 border-b border-border/60 hover:bg-secondary transition-colors text-left",
+                      isSelected &&
+                        "bg-accent-soft border-l-2 border-l-accent-hover",
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span
+                        className={cn(
+                          "w-2 h-2 rounded-full shrink-0 transition-all duration-300",
+                          isActive
+                            ? cn(status.fill, status.ring, "animate-pulse")
+                            : cn("bg-transparent border-2", status.border),
+                        )}
+                        aria-hidden
+                      />
+                      <h3 className="text-fg-primary text-sm truncate flex-1">
+                        {conversation.title}
+                      </h3>
+                      <span className="text-xs text-fg-faint shrink-0">
+                        {formatTime(conversation.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-fg-tertiary truncate pl-4">
+                      {conversation.lastMessage}
+                    </p>
+                  </button>
+                );
+              })
+            )}
           </div>
 
           {/* Footer. Note: the rest of this sidebar is unconditionally dark

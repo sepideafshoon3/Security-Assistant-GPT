@@ -2,6 +2,7 @@ import type { Message } from "../../App";
 import { Copy, Check, RotateCcw, Pencil, AlertCircle } from "lucide-react";
 import { IconButton } from "../IconButton";
 import { MessageContent } from "../MessageContent";
+import { FindingsBadge } from "./FindingsBadge";
 import { formatRelativeTime } from "../../utils/time";
 import { cn } from "../ui/utils";
 
@@ -32,6 +33,7 @@ export function MessageBubble({
         "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-300",
       )}
     >
+      {!isUser && <FindingsBadge text={message.text} />}
       <div
         className={cn(
           "max-w-[88%] sm:max-w-[70%] min-w-0 break-words rounded-2xl px-4 sm:px-5 py-3.5 transition-all",

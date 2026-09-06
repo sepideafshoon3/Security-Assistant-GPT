@@ -205,7 +205,7 @@ export function ChatInput({
           type="submit"
           disabled={!value.trim() || disabled}
           aria-label="Send message"
-          className="w-11 h-11 mb-0.5 bg-accent rounded-full flex items-center justify-center hover:bg-accent-hover transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_16px_-2px_var(--accent-glow)] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
+          className="w-11 h-11 mb-0.5 bg-accent rounded-full flex items-center justify-center hover:bg-accent-hover active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_16px_-2px_var(--accent-glow)] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
         >
           <Send className="w-4 h-4 text-white" aria-hidden />
         </button>

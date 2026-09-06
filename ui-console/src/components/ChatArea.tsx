@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import type { Conversation } from "../App";
-import { Trash2, MoreVertical } from "lucide-react";
+import { Trash2, MoreVertical, ShieldCheck } from "lucide-react";
 import { Greeting } from "./chat/Greeting";
 import { MessageBubble } from "./chat/MessageBubble";
 import { TypingIndicator } from "./chat/TypingIndicator";
@@ -130,7 +130,7 @@ export function ChatArea({
       <div className="h-16 bg-surface-elevated/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 sm:px-6 shadow-sm gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
-            <span className="text-white text-sm sm:text-base">AI</span>
+            <ShieldCheck className="w-5 h-5 text-white" aria-hidden />
           </div>
           <div className="min-w-0">
             <h2 className="text-fg-primary truncate">Security Assistant</h2>

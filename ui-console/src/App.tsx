@@ -1,11 +1,12 @@
 // src/App.tsx
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { useTheme } from "./hooks/useTheme";
 import { useIsMobile } from "./components/ui/use-mobile";
+import { deriveSeverity } from "./utils/findings";
 import {
   sendMessageToBackend,
   type BackendChatResponse,
@@ -31,10 +32,7 @@ export interface Conversation {
 }
 
 function deriveStatus(text: string): Conversation["status"] {
-  const t = (text || "").toLowerCase();
-  if (/\bcritical\b|\bcve-\d{4}-\d+\b|\brce\b/.test(t)) return "critical";
-  if (/vulnerab|finding|semgrep|bandit|osv-scan/.test(t)) return "findings";
-  return "clean";
+  return deriveSeverity(text);
 }
 
 function mapBackendConversationToConversation(
@@ -207,7 +205,7 @@ export default function App() {
 
         const finalConv: Conversation = {
           id: resp.conversation_id,
-          title: "Mr Robot Chat",
+          title: "Security Review",
           lastMessage: lastAssistantText,
           timestamp: new Date(),
           messages: [userMessage, ...assistantMessages],
@@ -349,10 +347,10 @@ export default function App() {
         </button>
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-gradient-to-br from-brand-cyan to-brand-green rounded-xl flex items-center justify-center shadow-lg shadow-brand-cyan/50">
-            <span className="text-black text-sm sm:text-base">MR</span>
+            <ShieldCheck className="w-5 h-5 text-black" aria-hidden />
           </div>
           <h1 className="truncate tracking-wider bg-gradient-to-r from-brand-cyan to-brand-green bg-clip-text text-transparent text-sm sm:text-base">
-            MR_ROBOT://CHAT
+            Security Assistant
           </h1>
         </div>
 
@@ -370,6 +368,7 @@ export default function App() {
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
           processingConversationIds={processingConversationIds}
+          isLoadingConversations={isLoading && conversations.length === 0}
           theme={theme}
           toggleTheme={toggleTheme}
         />
