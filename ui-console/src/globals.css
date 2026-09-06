@@ -10,7 +10,6 @@
   --color-brand-navy: #164E63;
   --color-brand-deep: #0F172A;
 
-  /* LIGHT MODE (Manadev cyan/blue, adapted for a light background) */
   --background: #f7fafc;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -72,7 +71,6 @@
   --brand-green: #3B82F6;
 }
 .dark {
-  /* DARK MODE (Manadev cyan/blue, matches the real site directly) */
   --background: #050b14;
   --foreground: #f1f5f9;
   --card: #0d1b2e;
