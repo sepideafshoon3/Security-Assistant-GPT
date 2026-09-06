@@ -5,14 +5,17 @@ interface ScrollToBottomButtonProps {
   onClick: () => void;
 }
 
-export function ScrollToBottomButton({ visible, onClick }: ScrollToBottomButtonProps) {
+export function ScrollToBottomButton({
+  visible,
+  onClick,
+}: ScrollToBottomButtonProps) {
   if (!visible) return null;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label="Scroll to latest message"
-      className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-surface-elevated/90 backdrop-blur-xl border border-white/10 text-fg-secondary hover:text-white hover:bg-surface-elevated shadow-lg flex items-center justify-center transition-all motion-safe:animate-in motion-safe:fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
+      className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 w-9 h-9 rounded-full bg-surface-elevated/90 backdrop-blur-xl border border-border text-fg-secondary hover:text-fg-primary hover:bg-surface-elevated shadow-lg flex items-center justify-center transition-all motion-safe:animate-in motion-safe:fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
     >
       <ChevronDown className="w-4 h-4" aria-hidden />
     </button>

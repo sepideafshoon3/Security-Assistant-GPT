@@ -82,13 +82,13 @@ export function ConversationList({
       aria-label="Conversations"
       aria-hidden={!isOpen}
       className={cn(
-        "bg-surface-deep/60 backdrop-blur-xl border-white/10 flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
+        "bg-surface-deep/60 backdrop-blur-xl border-border flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
         isOpen ? "w-80 border-r" : "w-0 border-r-0",
       )}
     >
       <div className="w-80 h-full flex flex-col">
         {/* New chat + search */}
-        <div className="p-4 border-b border-white/10 space-y-3">
+        <div className="p-4 border-b border-border space-y-3">
           <button
             onClick={onNewConversation}
             className="w-full bg-accent hover:bg-accent-hover rounded-lg py-2.5 flex items-center justify-center gap-2 transition-colors"
@@ -103,7 +103,7 @@ export function ConversationList({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-fg-secondary placeholder-fg-faint focus:outline-none focus:border-accent-hover/50 focus:ring-1 focus:ring-accent-hover/30 transition-colors"
+              className="w-full bg-input-background border border-border rounded-lg pl-9 pr-3 py-2.5 text-sm text-fg-secondary placeholder-fg-faint focus:outline-none focus:border-accent-hover/50 focus:ring-1 focus:ring-accent-hover/30 transition-colors"
             />
           </div>
         </div>
@@ -125,7 +125,7 @@ export function ConversationList({
                 onClick={() => onSelectConversation(conversation.id)}
                 title={isActive ? "Agent is working..." : status.label}
                 className={cn(
-                  "w-full p-4 border-b border-white/5 hover:bg-white/5 transition-colors text-left",
+                  "w-full p-4 border-b border-border/60 hover:bg-secondary transition-colors text-left",
                   isSelected && "bg-accent-soft border-l-2 border-l-accent-hover",
                 )}
               >
@@ -157,8 +157,8 @@ export function ConversationList({
         {/* Footer. Note: the rest of this sidebar is unconditionally dark
             (bg-surface-deep/60 etc.), but this row still carries light/dark
             pairs from before that change — pre-existing, left as-is here. */}
-        <div className="p-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
-          <div className="text-xs text-slate-400 dark:text-slate-500">
+        <div className="p-3 border-t border-border flex items-center justify-between">
+          <div className="text-xs text-fg-faint">
             {conversations.length} conversation
             {conversations.length === 1 ? "" : "s"}
           </div>
@@ -167,7 +167,7 @@ export function ConversationList({
             aria-label={
               theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
             }
-            className="relative w-8 h-8 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
+            className="relative w-8 h-8 text-fg-tertiary hover:text-fg-primary transition-colors hover:bg-secondary rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
           >
             <Sun
               className={cn(

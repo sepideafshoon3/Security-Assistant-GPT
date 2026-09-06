@@ -101,7 +101,7 @@ export function ChatInput({
           {pendingAttachments.map((att) => (
             <div
               key={att.id}
-              className="relative flex items-center gap-2 bg-surface-panel/80 border border-white/10 rounded-xl px-2 py-1.5 pr-7"
+              className="relative flex items-center gap-2 bg-surface-panel/80 border border-border rounded-xl px-2 py-1.5 pr-7"
             >
               {att.previewUrl ? (
                 <img
@@ -130,7 +130,7 @@ export function ChatInput({
 
       <form
         onSubmit={onSubmit}
-        className="flex items-center gap-3 rounded-3xl bg-surface-panel/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-accent-hover/20 shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_24px_-4px_rgba(99,102,241,0.25)] transition-shadow focus-within:ring-accent-hover/40 focus-within:shadow-[0_0_0_1px_rgba(99,102,241,0.15),0_12px_40px_-8px_rgba(0,0,0,0.6),0_0_32px_-2px_rgba(99,102,241,0.35)]"
+        className="flex items-center gap-3 rounded-3xl bg-surface-panel/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-accent-hover/20 shadow-[0_0_0_1px_var(--accent-soft),0_12px_40px_-8px_rgba(0,0,0,0.3),0_0_24px_-4px_var(--accent-glow)] transition-shadow focus-within:ring-accent-hover/40 focus-within:shadow-[0_0_0_1px_var(--accent-soft),0_12px_40px_-8px_rgba(0,0,0,0.3),0_0_32px_-2px_var(--accent-glow)]"
       >
         <input
           ref={fileInputRef}
@@ -151,8 +151,8 @@ export function ChatInput({
             className={cn(
               "w-9 h-9 p-0 leading-none flex-shrink-0 inline-flex items-center justify-center rounded-full transition-all",
               isAttachMenuOpen
-                ? "bg-white/10 text-fg-primary rotate-45"
-                : "text-fg-tertiary hover:text-fg-primary hover:bg-white/5",
+                ? "bg-secondary text-fg-primary rotate-45"
+                : "text-fg-tertiary hover:text-fg-primary hover:bg-secondary",
             )}
           >
             <Plus className="w-4 h-4 block" aria-hidden />
@@ -161,7 +161,7 @@ export function ChatInput({
           {isAttachMenuOpen && (
             <div
               role="menu"
-              className="absolute bottom-full left-0 mb-2 w-48 bg-surface-panel/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl shadow-black/40 p-1.5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-150"
+              className="absolute bottom-full left-0 mb-2 w-48 bg-surface-panel/95 backdrop-blur-xl border border-border rounded-2xl shadow-xl shadow-black/20 p-1.5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-150"
             >
               <button
                 type="button"
@@ -170,7 +170,7 @@ export function ChatInput({
                   setIsAttachMenuOpen(false);
                   fileInputRef.current?.click();
                 }}
-                className="w-full flex items-center gap-2.5 text-left text-sm text-fg-primary hover:bg-white/5 rounded-xl px-3 py-2 transition-colors"
+                className="w-full flex items-center gap-2.5 text-left text-sm text-fg-primary hover:bg-secondary rounded-xl px-3 py-2 transition-colors"
               >
                 <Paperclip className="w-4 h-4 text-fg-tertiary" aria-hidden />
                 Upload file
