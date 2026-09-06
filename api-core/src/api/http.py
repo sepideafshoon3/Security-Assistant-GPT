@@ -32,6 +32,7 @@ from src.core.models import Task, ConversationSummary
 from src.core.planner import Planner
 from src.core.executor import Executor
 from src.core.paths import BASE_DIR
+from src.db.session import init_db
 from src.learning.online_learning_client import OnlineLearningClient
 from src.memory.chat_memory import ChatMemory
 from src.security.audit import audit_log
@@ -106,6 +107,10 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 app = FastAPI(title="Security Assistant GPT (Lab)")
+
+@app.on_event("startup")
+def _create_tables_if_missing() -> None:
+    init_db()
 
 origins = [
     "http://localhost:5173",
