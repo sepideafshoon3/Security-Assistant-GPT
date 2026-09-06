@@ -5,6 +5,7 @@ import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { useTheme } from "./hooks/useTheme";
+import { useIsMobile } from "./components/ui/use-mobile";
 import {
   sendMessageToBackend,
   type BackendChatResponse,
@@ -93,7 +94,21 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 768,
+  );
+
+  // Keep the sidebar's open/closed default sensible as the viewport crosses
+  // the mobile breakpoint (e.g. rotating a tablet, resizing a window).
+  const [hasAdjustedForBreakpoint, setHasAdjustedForBreakpoint] =
+    useState(false);
+  useEffect(() => {
+    if (hasAdjustedForBreakpoint) return;
+    setIsSidebarOpen(!isMobile);
+    setHasAdjustedForBreakpoint(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -320,11 +335,11 @@ export default function App() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-green-100/40 dark:from-green-900/20 via-transparent to-transparent pointer-events-none" />
 
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 z-10 flex items-center px-6 shadow-lg shadow-cyan-500/5">
+      <div className="fixed top-0 left-0 right-0 h-16 bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 z-50 flex items-center px-3 sm:px-6 shadow-lg shadow-cyan-500/5">
         <button
           onClick={() => setIsSidebarOpen((v) => !v)}
           aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-          className="mr-3 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
+          className="mr-2 sm:mr-3 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover shrink-0"
         >
           {isSidebarOpen ? (
             <PanelLeftClose className="w-5 h-5" aria-hidden />
@@ -332,11 +347,11 @@ export default function App() {
             <PanelLeftOpen className="w-5 h-5" aria-hidden />
           )}
         </button>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-brand-cyan to-brand-green rounded-xl flex items-center justify-center shadow-lg shadow-brand-cyan/50">
-            <span className="text-black">MR</span>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-gradient-to-br from-brand-cyan to-brand-green rounded-xl flex items-center justify-center shadow-lg shadow-brand-cyan/50">
+            <span className="text-black text-sm sm:text-base">MR</span>
           </div>
-          <h1 className="tracking-wider bg-gradient-to-r from-brand-cyan to-brand-green bg-clip-text text-transparent">
+          <h1 className="truncate tracking-wider bg-gradient-to-r from-brand-cyan to-brand-green bg-clip-text text-transparent text-sm sm:text-base">
             MR_ROBOT://CHAT
           </h1>
         </div>
@@ -348,6 +363,8 @@ export default function App() {
       <div className="flex w-full pt-16 relative z-0">
         <ConversationList
           isOpen={isSidebarOpen}
+          isMobile={isMobile}
+          onClose={() => setIsSidebarOpen(false)}
           conversations={conversations}
           selectedConversationId={selectedConversationId ?? ""}
           onSelectConversation={handleSelectConversation}

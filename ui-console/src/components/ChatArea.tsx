@@ -127,22 +127,24 @@ export function ChatArea({
 
   return (
     <main className="flex-1 flex flex-col bg-background relative">
-      <div className="h-16 bg-surface-elevated/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
-            <span className="text-white">AI</span>
+      <div className="h-16 bg-surface-elevated/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 sm:px-6 shadow-sm gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
+            <span className="text-white text-sm sm:text-base">AI</span>
           </div>
-          <div>
-            <h2 className="text-fg-primary">Security Assistant</h2>
-            <p className="text-xs text-status-success flex items-center gap-1">
-              <span className="motion-safe:animate-pulse" aria-hidden>
+          <div className="min-w-0">
+            <h2 className="text-fg-primary truncate">Security Assistant</h2>
+            <p className="text-xs text-status-success flex items-center gap-1 truncate">
+              <span className="motion-safe:animate-pulse shrink-0" aria-hidden>
                 ●
               </span>
-              {conversation ? "Active" : "Waiting for first message"}
+              <span className="truncate">
+                {conversation ? "Active" : "Waiting for first message"}
+              </span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             aria-label="Delete conversation"
             className="text-fg-tertiary hover:text-fg-primary transition-colors p-2 hover:bg-secondary rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
@@ -166,7 +168,7 @@ export function ChatArea({
           aria-live="polite"
           aria-relevant="additions"
           aria-label="Conversation messages"
-          className="absolute inset-0 overflow-y-auto overflow-x-hidden p-6 pb-28 space-y-4"
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden p-3 sm:p-6 pb-28 space-y-4"
         >
           {messages.map((message) => (
             <MessageBubble
@@ -195,7 +197,7 @@ export function ChatArea({
 
         <div
           className={cn(
-            "absolute inset-x-0 top-0 bottom-0 flex flex-col items-center px-6 pointer-events-none",
+            "absolute inset-x-0 top-0 bottom-0 flex flex-col items-center px-3 sm:px-6 pointer-events-none",
             hasStarted ? "justify-end pb-6" : "justify-center pb-24",
           )}
         >
