@@ -33,6 +33,7 @@ from src.core.planner import Planner
 from src.core.executor import Executor
 from src.core.paths import BASE_DIR
 from src.db.session import init_db
+from src.api.auth_routes import router as auth_router
 from src.learning.online_learning_client import OnlineLearningClient
 from src.memory.chat_memory import ChatMemory
 from src.security.audit import audit_log
@@ -124,6 +125,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 
 # ============================================================
 # Core components
