@@ -1,10 +1,11 @@
-// src/App.tsx
-import { PanelLeftClose, PanelLeftOpen, ShieldCheck } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, ShieldCheck, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { LoginPage } from "./components/LoginPage";
 import { useTheme } from "./hooks/useTheme";
+import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./components/ui/use-mobile";
 import { deriveSeverity } from "./utils/findings";
 import {
@@ -38,13 +39,13 @@ function deriveStatus(text: string): Conversation["status"] {
 function mapBackendConversationToConversation(
   summary: BackendConversationSummary,
 ): Conversation {
-  const ts = summary.last_updated ? new Date(summary.last_updated) : new Date();
+  const fallbackTs = summary.last_updated ? new Date(summary.last_updated) : new Date();
 
   const messages: Message[] = (summary.last_messages || []).map((m, index) => ({
     id: `hist-${summary.conversation_id}-${index}`,
     text: m.content,
     sender: m.role === "user" ? "user" : "contact",
-    timestamp: ts,
+    timestamp: m.created_at ? new Date(m.created_at) : fallbackTs,
   }));
 
   const lastMessageText =
@@ -54,7 +55,7 @@ function mapBackendConversationToConversation(
     id: summary.conversation_id,
     title: summary.theme || "Conversation",
     lastMessage: lastMessageText,
-    timestamp: ts,
+    timestamp: fallbackTs,
     messages,
     status: deriveStatus(`${summary.theme || ""} ${lastMessageText}`),
   };
@@ -91,14 +92,14 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
 }
 
 export default function App() {
+  const auth = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 768,
   );
 
-  // Keep the sidebar's open/closed default sensible as the viewport crosses
-  // the mobile breakpoint (e.g. rotating a tablet, resizing a window).
+
   const [hasAdjustedForBreakpoint, setHasAdjustedForBreakpoint] =
     useState(false);
   useEffect(() => {
@@ -132,6 +133,8 @@ export default function App() {
     });
 
   useEffect(() => {
+    if (!auth.isAuthenticated) return;
+
     const load = async () => {
       setIsLoading(true);
       setError(null);
@@ -152,7 +155,7 @@ export default function App() {
     };
 
     load();
-  }, []);
+  }, [auth.isAuthenticated]);
 
   const handleNewConversation = () => {
     setError(null);
@@ -326,6 +329,18 @@ export default function App() {
     handleSendMessage(target.text);
   };
 
+  if (auth.isCheckingSession) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-slate-950">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    );
+  }
+
+  if (!auth.isAuthenticated) {
+    return <LoginPage onLogin={auth.login} onSignup={auth.signup} />;
+  }
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-white via-slate-50 to-white text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-gray-100 relative overflow-hidden transition-colors duration-300">
       {/* Background Effects */}
@@ -371,6 +386,8 @@ export default function App() {
           isLoadingConversations={isLoading && conversations.length === 0}
           theme={theme}
           toggleTheme={toggleTheme}
+          userEmail={auth.user?.email ?? null}
+          onLogout={auth.logout}
         />
 
         <ChatArea

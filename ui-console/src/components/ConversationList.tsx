@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import type { Conversation } from "../App";
 import { Search, Plus, Sun, Moon, X } from "lucide-react";
 import { cn } from "./ui/utils";
+import { UserMenu } from "./UserMenu";
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -15,6 +16,8 @@ interface ConversationListProps {
   processingConversationIds: Set<string>;
   theme: "light" | "dark";
   toggleTheme: () => void;
+  userEmail: string | null;
+  onLogout: () => void;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
@@ -55,6 +58,8 @@ export function ConversationList({
   processingConversationIds,
   theme,
   toggleTheme,
+  userEmail,
+  onLogout,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
 
@@ -262,6 +267,12 @@ export function ConversationList({
               />
             </button>
           </div>
+
+          {userEmail && (
+            <div className="p-2 border-t border-border">
+              <UserMenu email={userEmail} onLogout={onLogout} />
+            </div>
+          )}
         </div>
       </nav>
     </>

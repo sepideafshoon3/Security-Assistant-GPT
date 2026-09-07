@@ -1,4 +1,3 @@
-// src/api/chat.ts
 export interface BackendChatMessage {
   role: string;
   content: string;
@@ -20,9 +19,13 @@ export function getFriendlyErrorMessage(err: unknown): string {
   return "Something went wrong.";
 }
 
-// همون base URL که برای /chat استفاده می‌کنی:
 export const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem("sa_access_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export async function sendMessageToBackend(
   conversationId: string | null,
@@ -35,7 +38,7 @@ export async function sendMessageToBackend(
 
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),
   });
 
@@ -54,6 +57,7 @@ export async function sendMessageToBackend(
 export interface BackendHistoryMessage {
   role: string;
   content: string;
+  created_at?: string;
 }
 
 export interface BackendConversationSummary {
@@ -66,7 +70,9 @@ export interface BackendConversationSummary {
 }
 
 export async function fetchConversations(): Promise<BackendConversationSummary[]> {
-  const res = await fetch(`${API_BASE}/conversations`);
+  const res = await fetch(`${API_BASE}/conversations`, {
+    headers: { ...authHeaders() },
+  });
 
   const text = await res.text();
 
@@ -76,7 +82,6 @@ export async function fetchConversations(): Promise<BackendConversationSummary[]
     );
   }
 
-  // اگر باز هم HTML برگشته، اینجا سریع متوجه می‌شی
   try {
     const data = JSON.parse(text);
     return (data?.conversations as BackendConversationSummary[]) ?? [];

@@ -168,7 +168,7 @@ export function ChatArea({
           aria-live="polite"
           aria-relevant="additions"
           aria-label="Conversation messages"
-          className="absolute inset-0 overflow-y-auto overflow-x-hidden p-3 sm:p-6 pb-28 space-y-4"
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden p-3 sm:p-6 pb-36 space-y-4"
         >
           {messages.map((message) => (
             <MessageBubble
