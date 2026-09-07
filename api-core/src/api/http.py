@@ -1,4 +1,3 @@
-# src/api/http.py
 from __future__ import annotations
 
 import os
@@ -141,9 +140,7 @@ executor = Executor(
 )
 chat_memory = ChatMemory(CHAT_MEMORY_DIR, max_messages=50)
 
-# Central model/provider router (openai vs xai). Executor already builds its
-# advisor through the same factory; helpers below re-resolve when a request
-# overrides the model name.
+
 _llm_router = get_router()
 
 
@@ -171,8 +168,7 @@ def _resolve_llm_advisor(model_override: Optional[str] = None) -> Any:
     if detect_provider(override, explicit=base_provider) == detect_provider(
         base_model, explicit=base_provider
     ):
-        # Same provider: reuse the existing client instance (model name on
-        # config may still differ; callers pass model_name for logging only).
+       
         return base
 
     try:
@@ -202,9 +198,7 @@ def _resolve_llm_advisor(model_override: Optional[str] = None) -> Any:
 # Online Learning Client wiring
 # ============================================================
 
-# .env:
-# ONLINE_LEARNING_ENDPOINT=http://127.0.0.1:2121
-# ONLINE_LEARNING_API_KEY=optional-token
+
 online_learning_endpoint = os.getenv("ONLINE_LEARNING_ENDPOINT")
 online_learning_api_key = os.getenv("ONLINE_LEARNING_API_KEY")
 
@@ -452,9 +446,9 @@ async def chat(
             )
             online_learning_dispatcher.send_chat_turn(evt)
         except Exception:
-            logger.exception("[chat] learning dispatch failed | id=%s", conversation_id)
+            logger.exception("[chat] learning dispatch failed | id=%s", conversation.id)
 
-    return {"conversation_id": conversation_id, "reply": reply_text}
+    return {"conversation_id": conversation.id, "reply": reply_text}
 
 
 # ============================================================
@@ -518,6 +512,7 @@ async def health() -> Dict[str, Any]:
 async def send_online_learning_event(
     body: OnlineLearningEventRequest,
     request: Request,
+    current_user: User = Depends(get_current_user),
 ) -> OnlineLearningEventResponse:
     if online_learning_client is None:
         raise HTTPException(
@@ -572,6 +567,7 @@ async def send_online_learning_event(
 async def send_online_learning_bulk(
     body: OnlineLearningBulkRequest,
     request: Request,
+    current_user: User = Depends(get_current_user),
 ) -> OnlineLearningBulkResponse:
     if online_learning_client is None:
         raise HTTPException(
@@ -628,6 +624,7 @@ async def send_online_learning_bulk(
 async def openai_compatible_chat(
     request: Request,
     body: Dict[str, Any] = Body(...),
+    current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     messages: List[Dict[str, Any]] = body.get("messages") or []
     from src.llm.model_config import get_chat_model
@@ -789,6 +786,7 @@ async def receive_online_learning_event(
 async def build_online_learning_dataset(
     request: Request,
     body: Dict[str, Any] = Body(default={}),
+    current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Build a CSV from JSONL logs under data/online-learning-events/.
@@ -1124,6 +1122,7 @@ if __name__ == "__main__":
 async def exploit_generate(
     body: ExploitLLMRequest,
     request: Request,
+    current_user: User = Depends(get_current_user),
 ) -> ExploitLLMResponse:
     """
     Exploit LLM endpoint used by ExploitModeEngine._try_llm_generation().
