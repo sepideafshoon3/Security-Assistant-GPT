@@ -1,4 +1,3 @@
-# src/db/models.py
 from __future__ import annotations
 
 import uuid
@@ -35,7 +34,7 @@ class User(Base):
         passive_deletes=True,
     )
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:  
         return f"<User id={self.id} email={self.email}>"
 
 
