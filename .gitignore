@@ -33,3 +33,4 @@ build/
 htmlcov/
 data/
 package-lock.json
+project.zip
