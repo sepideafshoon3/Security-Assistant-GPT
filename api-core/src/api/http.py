@@ -6,14 +6,15 @@ import json
 import uuid
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from time import time
 from typing import Optional, List, Dict, Any, Iterable
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Body, status
+from fastapi import FastAPI, HTTPException, Request, Body, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from src.api.schemas.schemas import (
     CreateTaskRequest,
@@ -32,11 +33,13 @@ from src.core.models import Task, ConversationSummary
 from src.core.planner import Planner
 from src.core.executor import Executor
 from src.core.paths import BASE_DIR
-from src.db.session import init_db
+from src.db.session import init_db, get_db
+from src.db.models import User, Conversation, Message
 from src.api.auth_routes import router as auth_router
 from src.learning.online_learning_client import OnlineLearningClient
 from src.memory.chat_memory import ChatMemory
 from src.security.audit import audit_log
+from src.security.auth import get_current_user
 from src.learning.online_learning_events import (
     OnlineLearningEventDispatcher,
     ChatTurnEvent,
@@ -240,7 +243,7 @@ def _read_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
                 continue
             try:
                 yield json.loads(line)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e: 
                 logger.warning(
                     "[dataset] skip bad jsonl line | file=%s line=%d error=%r",
                     path.name,
@@ -322,11 +325,40 @@ def build_online_learning_dataset_csv(
 
 
 # ============================================================
+# Auto-titling helper
+# ============================================================
+
+def _maybe_generate_title(
+    conversation: Conversation,
+    advisor: Any,
+    first_user_message: str,
+    db: Session,
+) -> None:
+    if not conversation.title_is_generated:
+        return
+    try:
+        title = advisor.secure_chat(messages=[
+            {"role": "system", "content": "یک عنوان بسیار کوتاه (حداکثر ۵ کلمه) برای این گفتگو بده. فقط عنوان را برگردان."},
+            {"role": "user", "content": first_user_message},
+        ]).strip().strip('"')
+        if title:
+            conversation.title = title[:255]
+            conversation.title_is_generated = False  # دیگه خودکار عوضش نکن
+            db.commit()
+    except Exception:
+        logger.exception("[chat] title generation failed | id=%s", conversation.id)
+
+
+# ============================================================
 # /chat: core chat endpoint
 # ============================================================
 
 @app.post("/chat")
-async def chat(request: Request) -> Dict[str, Any]:
+async def chat(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
     data: Dict[str, Any] = await request.json()
     conversation_id: Optional[str] = data.get("conversation_id")
     raw_messages: List[Dict[str, Any]] = data.get("messages", [])
@@ -356,37 +388,46 @@ async def chat(request: Request) -> Dict[str, Any]:
     if last_user_msg is None:
         last_user_msg = new_messages[-1]
 
-    if not conversation_id:
-        conversation_id = str(uuid.uuid4())
-        history: List[Dict[str, str]] = []
-    else:
-        try:
-            history = chat_memory.load_history(conversation_id) or []
-        except Exception as e:
-            logger.warning("[chat] failed to load history | id=%s error=%r", conversation_id, e)
-            history = []
+    # Resolve or create the conversation — always scoped to current_user so
+    # nobody can read/append to someone else's chat by guessing an id.
+    conversation: Optional[Conversation] = None
+    if conversation_id:
+        conversation = (
+            db.query(Conversation)
+            .filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id)
+            .first()
+        )
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
-    if not isinstance(history, list):
-        history = []
+    if conversation is None:
+        conversation = Conversation(user_id=current_user.id)
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
 
+    history = [{"role": m.role, "content": m.content} for m in conversation.messages]
     llm_messages: List[Dict[str, str]] = history + [last_user_msg]
 
     try:
         reply_text: str = advisor.secure_chat(messages=llm_messages)
     except Exception as e:
-        logger.exception("[chat] secure_chat failed | id=%s error=%r", conversation_id, e)
+        logger.exception("[chat] secure_chat failed | id=%s error=%r", conversation.id, e)
         raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}")
 
-    chat_memory.append_turn(
-        conversation_id,
-        user_msg=last_user_msg,
-        assistant_msg={"role": "assistant", "content": reply_text},
-    )
+    if len(history) == 0:
+        _maybe_generate_title(conversation, advisor, last_user_msg["content"], db)
+
+    db.add(Message(conversation_id=conversation.id, role="user", content=last_user_msg["content"]))
+    db.add(Message(conversation_id=conversation.id, role="assistant", content=reply_text))
+    conversation.updated_at = datetime.now(timezone.utc)
+    db.commit()
 
     audit_log(
         "chat_request",
         {
-            "conversation_id": conversation_id,
+            "conversation_id": conversation.id,
+            "user_id": current_user.id,
             "num_history_messages": len(history),
             "uses_knowledge_file": False,
         },
@@ -398,7 +439,7 @@ async def chat(request: Request) -> Dict[str, Any]:
             from src.llm.model_config import get_chat_model
 
             evt = ChatTurnEvent(
-                conversation_id=conversation_id,
+                conversation_id=conversation.id,
                 user_message=last_user_msg["content"],
                 assistant_reply=reply_text,
                 num_history_messages=len(history),
@@ -421,47 +462,33 @@ async def chat(request: Request) -> Dict[str, Any]:
 # ============================================================
 
 @app.get("/conversations")
-async def list_conversations() -> Dict[str, Any]:
+async def list_conversations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.user_id == current_user.id)
+        .order_by(Conversation.updated_at.desc())
+        .all()
+    )
+
     summaries: List[ConversationSummary] = []
-
-    for path in CHAT_MEMORY_DIR.glob("*.json"):
-        conversation_id = path.stem
-
-        try:
-            history = chat_memory.load_history(conversation_id) or []
-        except Exception as e:
-            logger.warning("[conversations] load failed | id=%s error=%r", conversation_id, e)
-            history = []
-
-        if not isinstance(history, list):
-            history = []
-
-        theme = "conversation"
-        keywords: List[str] = []
-
-        num_messages = len(history)
-        last_messages = history[-5:] if num_messages > 5 else history
-
-        try:
-            last_updated = datetime.fromtimestamp(path.stat().st_mtime)
-        except Exception:
-            last_updated = None
-
+    for conv in conversations:
+        history = [
+            {"role": m.role, "content": m.content, "created_at": m.created_at}
+            for m in conv.messages
+        ]
         summaries.append(
             ConversationSummary(
-                conversation_id=conversation_id,
-                theme=theme,
-                keywords=keywords,
-                num_messages=num_messages,
-                last_updated=last_updated,
-                last_messages=last_messages,
+                conversation_id=conv.id,
+                theme=conv.title,
+                keywords=[],
+                num_messages=len(history),
+                last_updated=conv.updated_at,
+                last_messages=history[-5:],
             )
         )
-
-    summaries.sort(
-        key=lambda s: (s.last_updated or datetime.fromtimestamp(0)),
-        reverse=True,
-    )
 
     return {"conversations": [s.model_dump() for s in summaries]}
 
@@ -835,7 +862,6 @@ def _synthesize_exploit_llm(req: ExploitLLMRequest) -> ExploitLLMResponse:
     """
     from json import JSONDecodeError
 
-    # Use the same advisor as /chat
     advisor = executor.llm_advisor
     if advisor is None or advisor.client is None or not getattr(advisor.config, "enabled", False):
         logger.warning("[exploit_llm] advisor disabled or unavailable, using local fallback.")
@@ -880,7 +906,6 @@ def _synthesize_exploit_llm(req: ExploitLLMRequest) -> ExploitLLMResponse:
     raw_str = raw.strip()
     logger.debug("[exploit_llm] raw model output: %s", raw_str[:500])
 
-    # Try to parse JSON
     try:
         data = json.loads(raw_str)
     except JSONDecodeError as e:
