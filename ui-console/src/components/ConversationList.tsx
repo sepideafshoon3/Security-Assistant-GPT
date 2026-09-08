@@ -18,6 +18,7 @@ interface ConversationListProps {
   toggleTheme: () => void;
   userEmail: string | null;
   onLogout: () => void;
+  onLoginClick: () => void;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
@@ -60,6 +61,7 @@ export function ConversationList({
   toggleTheme,
   userEmail,
   onLogout,
+  onLoginClick,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
 
@@ -268,9 +270,21 @@ export function ConversationList({
             </button>
           </div>
 
-          {userEmail && (
+          {userEmail ? (
             <div className="p-2 border-t border-border">
               <UserMenu email={userEmail} onLogout={onLogout} />
+            </div>
+          ) : (
+            <div className="p-3 border-t border-border space-y-2.5">
+              <p className="text-xs text-fg-faint leading-relaxed">
+                برای دیدن گفتگوهای ذخیره‌شده و ادامه‌ی بررسی‌هات وارد شو.
+              </p>
+              <button
+                onClick={onLoginClick}
+                className="w-full h-8 rounded-lg border border-border text-fg-secondary text-sm hover:bg-secondary transition-colors"
+              >
+                ورود
+              </button>
             </div>
           )}
         </div>

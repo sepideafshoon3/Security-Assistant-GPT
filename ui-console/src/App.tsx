@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
 import { ErrorBanner } from "./components/ErrorBanner";
-import { LoginPage } from "./components/LoginPage";
+import { LoginModal } from "./components/LoginModal";
 import { useTheme } from "./hooks/useTheme";
 import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./components/ui/use-mobile";
@@ -93,13 +93,18 @@ function mapBackendToMessages(resp: BackendChatResponse): Message[] {
 
 export default function App() {
   const auth = useAuth();
+  const [authModal, setAuthModal] = useState<{ open: boolean; mode: "login" | "signup" }>({
+    open: false,
+    mode: "login",
+  });
   const { theme, toggleTheme } = useTheme();
   const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 768,
   );
 
-
+  // Keep the sidebar's open/closed default sensible as the viewport crosses
+  // the mobile breakpoint (e.g. rotating a tablet, resizing a window).
   const [hasAdjustedForBreakpoint, setHasAdjustedForBreakpoint] =
     useState(false);
   useEffect(() => {
@@ -131,6 +136,12 @@ export default function App() {
       next.delete(id);
       return next;
     });
+
+  useEffect(() => {
+    if (!auth.isCheckingSession && !auth.isAuthenticated) {
+      setAuthModal((s) => (s.open ? s : { open: true, mode: "login" }));
+    }
+  }, [auth.isCheckingSession, auth.isAuthenticated]);
 
   useEffect(() => {
     if (!auth.isAuthenticated) return;
@@ -167,6 +178,11 @@ export default function App() {
   const handleSendMessage = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+
+    if (!auth.isAuthenticated) {
+      setAuthModal({ open: true, mode: "login" });
+      return;
+    }
 
     setError(null);
 
@@ -337,9 +353,11 @@ export default function App() {
     );
   }
 
-  if (!auth.isAuthenticated) {
-    return <LoginPage onLogin={auth.login} onSignup={auth.signup} />;
-  }
+  // No early return for guests: the shell below renders for everyone,
+  // and the login modal overlays it (see bottom of the JSX). This is what
+  // lets a logged-out visitor see the app dimmed behind the dialog instead
+  // of a blank page, the way ChatGPT's logged-out state works.
+
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-white via-slate-50 to-white text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-gray-100 relative overflow-hidden transition-colors duration-300">
@@ -369,7 +387,24 @@ export default function App() {
           </h1>
         </div>
 
-        <div className="ml-auto flex items-center gap-4 text-xs" />
+        <div className="ml-auto flex items-center gap-2 text-xs">
+          {!auth.isAuthenticated && !auth.isCheckingSession && (
+            <>
+              <button
+                onClick={() => setAuthModal({ open: true, mode: "login" })}
+                className="h-8 px-3.5 rounded-full text-slate-700 dark:text-slate-200 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              >
+                Log in
+              </button>
+              <button
+                onClick={() => setAuthModal({ open: true, mode: "signup" })}
+                className="h-8 px-3.5 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm hover:opacity-90 transition-opacity"
+              >
+                Sign up for free
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main Content */}
@@ -388,6 +423,7 @@ export default function App() {
           toggleTheme={toggleTheme}
           userEmail={auth.user?.email ?? null}
           onLogout={auth.logout}
+          onLoginClick={() => setAuthModal({ open: true, mode: "login" })}
         />
 
         <ChatArea
@@ -417,6 +453,14 @@ export default function App() {
           }
         />
       )}
+
+      <LoginModal
+        isOpen={authModal.open}
+        initialMode={authModal.mode}
+        onClose={() => setAuthModal((s) => ({ ...s, open: false }))}
+        onLogin={auth.login}
+        onSignup={auth.signup}
+      />
     </div>
   );
 }
