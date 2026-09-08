@@ -38,7 +38,7 @@ from src.api.auth_routes import router as auth_router
 from src.learning.online_learning_client import OnlineLearningClient
 from src.memory.chat_memory import ChatMemory
 from src.security.audit import audit_log
-from src.security.auth import get_current_user
+from src.security.auth import get_current_user, ensure_jwt_secret_configured
 from src.learning.online_learning_events import (
     OnlineLearningEventDispatcher,
     ChatTurnEvent,
@@ -114,6 +114,7 @@ app = FastAPI(title="Security Assistant GPT (Lab)")
 @app.on_event("startup")
 def _create_tables_if_missing() -> None:
     init_db()
+    ensure_jwt_secret_configured()
 
 origins = [
     "http://localhost:5173",
@@ -140,7 +141,9 @@ executor = Executor(
 )
 chat_memory = ChatMemory(CHAT_MEMORY_DIR, max_messages=50)
 
-
+# Central model/provider router (openai vs xai). Executor already builds its
+# advisor through the same factory; helpers below re-resolve when a request
+# overrides the model name.
 _llm_router = get_router()
 
 
@@ -168,7 +171,8 @@ def _resolve_llm_advisor(model_override: Optional[str] = None) -> Any:
     if detect_provider(override, explicit=base_provider) == detect_provider(
         base_model, explicit=base_provider
     ):
-       
+        # Same provider: reuse the existing client instance (model name on
+        # config may still differ; callers pass model_name for logging only).
         return base
 
     try:
@@ -198,7 +202,9 @@ def _resolve_llm_advisor(model_override: Optional[str] = None) -> Any:
 # Online Learning Client wiring
 # ============================================================
 
-
+# .env:
+# ONLINE_LEARNING_ENDPOINT=http://127.0.0.1:2121
+# ONLINE_LEARNING_API_KEY=optional-token
 online_learning_endpoint = os.getenv("ONLINE_LEARNING_ENDPOINT")
 online_learning_api_key = os.getenv("ONLINE_LEARNING_API_KEY")
 
@@ -237,7 +243,7 @@ def _read_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
                 continue
             try:
                 yield json.loads(line)
-            except Exception as e: 
+            except Exception as e:  # noqa: BLE001
                 logger.warning(
                     "[dataset] skip bad jsonl line | file=%s line=%d error=%r",
                     path.name,
@@ -860,6 +866,7 @@ def _synthesize_exploit_llm(req: ExploitLLMRequest) -> ExploitLLMResponse:
     """
     from json import JSONDecodeError
 
+    # Use the same advisor as /chat
     advisor = executor.llm_advisor
     if advisor is None or advisor.client is None or not getattr(advisor.config, "enabled", False):
         logger.warning("[exploit_llm] advisor disabled or unavailable, using local fallback.")
@@ -904,6 +911,7 @@ def _synthesize_exploit_llm(req: ExploitLLMRequest) -> ExploitLLMResponse:
     raw_str = raw.strip()
     logger.debug("[exploit_llm] raw model output: %s", raw_str[:500])
 
+    # Try to parse JSON
     try:
         data = json.loads(raw_str)
     except JSONDecodeError as e:

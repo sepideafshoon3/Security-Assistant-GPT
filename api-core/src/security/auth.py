@@ -38,7 +38,16 @@ def _get_jwt_secret() -> str:
     global _cached_secret
     if _cached_secret is None:
         secret = os.getenv("JWT_SECRET_KEY")
+        app_env = os.getenv("APP_ENV", "development").strip().lower()
+
         if not secret:
+            if app_env not in ("development", "dev", "local"):
+                raise RuntimeError(
+                    f"JWT_SECRET_KEY is not set and APP_ENV={app_env!r} is not "
+                    "a local/dev environment. Refusing to start with an "
+                    "insecure default secret. Set JWT_SECRET_KEY (e.g. "
+                    "`openssl rand -hex 32`) before deploying."
+                )
             logger.warning(
                 "[auth] JWT_SECRET_KEY is not set - using an insecure "
                 "development default. Set JWT_SECRET_KEY in your .env "
@@ -47,6 +56,12 @@ def _get_jwt_secret() -> str:
             secret = _DEV_DEFAULT_SECRET
         _cached_secret = secret
     return _cached_secret
+
+
+def ensure_jwt_secret_configured() -> None:
+    """Call once at app startup so a missing JWT_SECRET_KEY in a non-dev
+    environment fails immediately, rather than on the first login request."""
+    _get_jwt_secret()
 
 
 def _get_jwt_algorithm() -> str:
