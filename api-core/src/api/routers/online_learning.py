@@ -305,10 +305,19 @@ async def build_online_learning_dataset(
       - output_filename: str (default: online_learning_dataset.csv)
       - dedupe_by_event_id: bool (default: False)
     """
-    output_filename = str(body.get("output_filename") or "online_learning_dataset.csv")
+    raw_filename = str(body.get("output_filename") or "online_learning_dataset.csv")
     dedupe_by_event_id = bool(body.get("dedupe_by_event_id") or False)
 
-    output_path = DATASETS_DIR / output_filename
+    # Path traversal guard: keep only the filename component (drops any
+    # directory parts, "..", leading "/", etc.), then confirm the resolved
+    # path is still actually inside DATASETS_DIR before writing anything.
+    safe_name = Path(raw_filename).name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid output_filename.")
+
+    output_path = (DATASETS_DIR / safe_name).resolve()
+    if output_path.parent != DATASETS_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Invalid output_filename.")
 
     try:
         csv_path = build_online_learning_dataset_csv(
