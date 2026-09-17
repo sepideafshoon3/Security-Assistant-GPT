@@ -17,6 +17,10 @@ class ReportResponse(BaseModel):
     summary: str
 
 
+class ConversationRenameRequest(BaseModel):
+    title: str
+
+
 class ChatMessage(BaseModel):
     # Keep this simple to avoid Pydantic forward-ref issues
     role: str      # expected: "user" or "assistant" (or "system")
