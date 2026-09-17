@@ -90,3 +90,37 @@ export async function fetchConversations(): Promise<BackendConversationSummary[]
     throw new Error("Invalid JSON from /conversations");
   }
 }
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `Failed to delete conversation (${res.status}): ${body.slice(0, 200)}`
+    );
+  }
+}
+
+export async function renameConversation(
+  conversationId: string,
+  title: string
+): Promise<{ conversation_id: string; theme: string; last_updated?: string }> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ title }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `Failed to rename conversation (${res.status}): ${body.slice(0, 200)}`
+    );
+  }
+
+  return res.json();
+}

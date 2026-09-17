@@ -14,6 +14,8 @@ import {
   fetchConversations,
   type BackendConversationSummary,
   getFriendlyErrorMessage,
+  deleteConversation,
+  renameConversation,
 } from "./api/chat";
 export interface Message {
   id: string;
@@ -173,6 +175,44 @@ export default function App() {
     setErrorRetry(null);
     setIsLoading(false);
     setSelectedConversationId(null);
+  };
+
+  const handleDeleteConversation = async (conversationId: string) => {
+    // Optimistic removal — revert if the request fails.
+    const previous = conversations;
+    setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+    if (selectedConversationId === conversationId) {
+      setSelectedConversationId(null);
+    }
+
+    try {
+      await deleteConversation(conversationId);
+    } catch (e: any) {
+      console.error(e);
+      setConversations(previous);
+      if (selectedConversationId === conversationId) {
+        setSelectedConversationId(conversationId);
+      }
+      setError(getFriendlyErrorMessage(e));
+    }
+  };
+
+  const handleRenameConversation = async (conversationId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+
+    const previous = conversations;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, title: trimmed } : c)),
+    );
+
+    try {
+      await renameConversation(conversationId, trimmed);
+    } catch (e: any) {
+      console.error(e);
+      setConversations(previous);
+      setError(getFriendlyErrorMessage(e));
+    }
   };
 
   const handleSendMessage = async (text: string) => {
@@ -423,6 +463,8 @@ export default function App() {
           toggleTheme={toggleTheme}
           userEmail={auth.user?.email ?? null}
           onLogout={auth.logout}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
           onLoginClick={() => setAuthModal({ open: true, mode: "login" })}
         />
 

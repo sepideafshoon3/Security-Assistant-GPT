@@ -1,8 +1,18 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import type { Conversation } from "../App";
-import { Search, Plus, Sun, Moon, X } from "lucide-react";
+import { Search, Plus, Sun, Moon, X, Pencil, Trash2, Check } from "lucide-react";
 import { cn } from "./ui/utils";
 import { UserMenu } from "./UserMenu";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "./ui/alert-dialog";
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -19,6 +29,8 @@ interface ConversationListProps {
   userEmail: string | null;
   onLogout: () => void;
   onLoginClick: () => void;
+  onDeleteConversation: (id: string) => void;
+  onRenameConversation: (id: string, title: string) => void;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
@@ -62,8 +74,39 @@ export function ConversationList({
   userEmail,
   onLogout,
   onLoginClick,
+  onDeleteConversation,
+  onRenameConversation,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renamingId) renameInputRef.current?.focus();
+  }, [renamingId]);
+
+  const startRename = (conversation: Conversation) => {
+    setRenamingId(conversation.id);
+    setRenameValue(conversation.title);
+  };
+
+  const commitRename = () => {
+    if (!renamingId) return;
+    const trimmed = renameValue.trim();
+    if (trimmed) onRenameConversation(renamingId, trimmed);
+    setRenamingId(null);
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  const pendingDeleteConversation = conversations.find(
+    (c) => c.id === pendingDeleteId,
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -193,40 +236,104 @@ export function ConversationList({
                 const isActive = processingConversationIds.has(
                   conversation.id,
                 );
+                const isRenaming = renamingId === conversation.id;
                 return (
-                  <button
+                  <div
                     key={conversation.id}
                     role="listitem"
-                    aria-current={isSelected ? "true" : undefined}
-                    onClick={() => handleSelect(conversation.id)}
-                    title={isActive ? "Agent is working..." : status.label}
                     className={cn(
-                      "w-full p-4 border-b border-border/60 hover:bg-secondary transition-colors text-left",
-                      isSelected &&
-                        "bg-accent-soft border-l-2 border-l-accent-hover",
+                      "group relative w-full border-b border-border/60 transition-colors",
+                      isSelected && "bg-accent-soft border-l-2 border-l-accent-hover",
                     )}
                   >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span
-                        className={cn(
-                          "w-2 h-2 rounded-full shrink-0 transition-all duration-300",
-                          isActive
-                            ? cn(status.fill, status.ring, "animate-pulse")
-                            : cn("bg-transparent border-2", status.border),
+                    <button
+                      aria-current={isSelected ? "true" : undefined}
+                      onClick={() => !isRenaming && handleSelect(conversation.id)}
+                      title={isActive ? "Agent is working..." : status.label}
+                      className={cn(
+                        "w-full p-4 hover:bg-secondary transition-colors text-left",
+                        isSelected && "hover:bg-transparent",
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span
+                          className={cn(
+                            "w-2 h-2 rounded-full shrink-0 transition-all duration-300",
+                            isActive
+                              ? cn(status.fill, status.ring, "animate-pulse")
+                              : cn("bg-transparent border-2", status.border),
+                          )}
+                          aria-hidden
+                        />
+                        {isRenaming ? (
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                commitRename();
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                cancelRename();
+                              }
+                            }}
+                            onBlur={commitRename}
+                            className="flex-1 min-w-0 bg-input-background border border-accent-hover/50 rounded px-1.5 py-0.5 text-sm text-fg-primary outline-none focus:ring-1 focus:ring-accent-hover/40"
+                          />
+                        ) : (
+                          <h3 className="text-fg-primary text-sm truncate flex-1">
+                            {conversation.title}
+                          </h3>
                         )}
-                        aria-hidden
-                      />
-                      <h3 className="text-fg-primary text-sm truncate flex-1">
-                        {conversation.title}
-                      </h3>
-                      <span className="text-xs text-fg-faint shrink-0">
-                        {formatTime(conversation.timestamp)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-fg-tertiary truncate pl-4">
-                      {conversation.lastMessage}
-                    </p>
-                  </button>
+                        {!isRenaming && (
+                          <span className="text-xs text-fg-faint shrink-0 group-hover:opacity-0 transition-opacity">
+                            {formatTime(conversation.timestamp)}
+                          </span>
+                        )}
+                      </div>
+                      {!isRenaming && (
+                        <p className="text-sm text-fg-tertiary truncate pl-4">
+                          {conversation.lastMessage}
+                        </p>
+                      )}
+                    </button>
+
+                    {isRenaming ? (
+                      <button
+                        onClick={commitRename}
+                        aria-label="Save name"
+                        className="absolute right-3 top-3.5 p-1 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" aria-hidden />
+                      </button>
+                    ) : (
+                      <div className="absolute right-2 top-2.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename(conversation);
+                          }}
+                          aria-label="Rename conversation"
+                          className="p-1.5 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" aria-hidden />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPendingDeleteId(conversation.id);
+                          }}
+                          aria-label="Delete conversation"
+                          className="p-1.5 rounded text-fg-tertiary hover:text-status-danger hover:bg-secondary transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })
             )}
@@ -289,6 +396,36 @@ export function ConversationList({
           )}
         </div>
       </nav>
+
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteConversation
+                ? `"${pendingDeleteConversation.title}" and all of its messages will be permanently deleted. This can't be undone.`
+                : "This conversation and all of its messages will be permanently deleted. This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDeleteId) onDeleteConversation(pendingDeleteId);
+                setPendingDeleteId(null);
+              }}
+              className="bg-status-danger text-white hover:bg-status-danger/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
