@@ -1,0 +1,29 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^api-core/
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        files: ^api-core/
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (ui-console)
+        entry: bash -c 'cd ui-console && npx eslint .'
+        language: system
+        files: ^ui-console/src/.*\.(ts|tsx)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier --check (ui-console)
+        entry: bash -c 'cd ui-console && npx prettier --check .'
+        language: system
+        files: ^ui-console/src/.*\.(ts|tsx|css)$
+        pass_filenames: false

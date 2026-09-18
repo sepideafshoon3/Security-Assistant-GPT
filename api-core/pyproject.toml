@@ -32,6 +32,8 @@ dev = [
     "pytest-asyncio",
     "mypy",
     "ruff",
+    "black",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]
@@ -39,3 +41,20 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/F: pyflakes+pycodestyle core errors. I: import sorting (replaces isort).
+# B: flake8-bugbear (catches common real bugs, not just style). UP: pyupgrade.
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length is Black's job, not Ruff's
+    "B008",  # Depends(...)/Body(...) as default args is the correct FastAPI pattern
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
