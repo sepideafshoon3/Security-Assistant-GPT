@@ -1,7 +1,7 @@
-from pathlib import Path
-from glob import glob
 import json
 import os
+from glob import glob
+from pathlib import Path
 
 
 def load_latest_dark_recon_summary(
@@ -21,7 +21,7 @@ def load_latest_dark_recon_summary(
 
     latest = max(files, key=os.path.getmtime)
     try:
-        with open(latest, "r", encoding="utf-8") as f:
+        with open(latest, encoding="utf-8") as f:
             data = json.load(f)
 
         slim = {

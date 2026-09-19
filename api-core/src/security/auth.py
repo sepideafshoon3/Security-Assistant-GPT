@@ -2,12 +2,12 @@
 Auth: password hashing, JWT session tokens, and a FastAPI dependency that
 resolves the current authenticated user from the Authorization header.
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -30,8 +30,9 @@ def hash_password(plain_password: str) -> str:
 def verify_password(plain_password: str, password_hash: str) -> bool:
     return _pwd_context.verify(plain_password, password_hash)
 
+
 _DEV_DEFAULT_SECRET = "dev-only-insecure-secret-change-me"
-_cached_secret: Optional[str] = None
+_cached_secret: str | None = None
 
 
 def _get_jwt_secret() -> str:
@@ -71,8 +72,9 @@ def _get_jwt_algorithm() -> str:
 def _get_jwt_expire_minutes() -> int:
     return int(os.getenv("JWT_EXPIRE_MINUTES", str(60 * 24 * 7)))
 
+
 def create_access_token(*, user_id: str) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": user_id,
         "iat": now,
@@ -80,17 +82,26 @@ def create_access_token(*, user_id: str) -> str:
     }
     return jwt.encode(payload, _get_jwt_secret(), algorithm=_get_jwt_algorithm())
 
+
 def decode_access_token(token: str) -> str:
     try:
-        payload = jwt.decode(token, _get_jwt_secret(), algorithms=[_get_jwt_algorithm()])
+        payload = jwt.decode(
+            token, _get_jwt_secret(), algorithms=[_get_jwt_algorithm()]
+        )
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired"
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
-    user_id: Optional[str] = payload.get("sub")
+    user_id: str | None = payload.get("sub")
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
     return user_id
 
 
@@ -98,7 +109,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     if credentials is None or not credentials.credentials:
@@ -111,5 +122,7 @@ def get_current_user(
     user_id = decode_access_token(credentials.credentials)
     user = db.get(User, user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
     return user

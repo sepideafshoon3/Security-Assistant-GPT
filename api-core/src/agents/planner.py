@@ -1,23 +1,25 @@
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import logging
-import datetime as _dt
-from typing import List, Dict, Any, Optional
 
-from src.prompts.openai.planner import SYSTEM_PLANNER, USER_TO_PLAN_JSON, PLAN_WITH_EVIDENCE_JSON
-from src.tools.utils import call_llm, parse_llm_json
+from src.prompts.openai.planner import PLAN_WITH_EVIDENCE_JSON, SYSTEM_PLANNER
+
+from src.api.schemas.schemas import EvidenceItem, FinalPlan, PlanDraft
 from src.tools.registry import dispatch_tool_call
-from src.api.schemas.schemas import PlanDraft, FinalPlan, EvidenceItem
+from src.tools.utils import call_llm, parse_llm_json
 
 log = logging.getLogger(__name__)
 
-def _auto_answer_questions(questions: List[Dict[str, str]]) -> Dict[str, str]:
+
+def _auto_answer_questions(questions: list[dict[str, str]]) -> dict[str, str]:
     """
     Very simple auto-answerer used for fully-automated runs.
     Every question is answered with the placeholder "skip".
     """
     return {q["id"]: "skip" for q in questions}
+
 
 def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalPlan:
     """
@@ -69,22 +71,26 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     # -----------------------------------------------------------------
     # 5. Use tool registry for batch search (research_search tool)
     # -----------------------------------------------------------------
-    search_result = dispatch_tool_call("research_search", {
-        "queries": queries,
-        "max_results_per_query": 10,
-    })
+    search_result = dispatch_tool_call(
+        "research_search",
+        {
+            "queries": queries,
+            "max_results_per_query": 10,
+        },
+    )
 
     raw_results = search_result.get("results", [])
     log.info(
         "Planner research_search: %d queries -> %d results",
-        len(queries), len(raw_results),
+        len(queries),
+        len(raw_results),
     )
 
     # -----------------------------------------------------------------
     # 6. Build evidence items from tool results
     # -----------------------------------------------------------------
-    evidence_items: List[EvidenceItem] = []
-    now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    evidence_items: list[EvidenceItem] = []
+    now_iso = _dt.datetime.now(_dt.UTC).isoformat()
 
     for idx, res in enumerate(raw_results, start=1):
         evidence_items.append(
@@ -106,15 +112,21 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     evidence_dicts = []
     for e in evidence_items:
         if hasattr(e, "dict"):
-            evidence_dicts.append(e.dict() if callable(getattr(e, "dict", None)) else dict(e))
+            evidence_dicts.append(
+                e.dict() if callable(getattr(e, "dict", None)) else dict(e)
+            )
         else:
             evidence_dicts.append(dict(e))
 
-    synthesis_prompt = json.dumps({
-        "user_request": user_request,
-        "answers": answers,
-        "evidence": evidence_dicts,
-    }, ensure_ascii=False, indent=2)
+    synthesis_prompt = json.dumps(
+        {
+            "user_request": user_request,
+            "answers": answers,
+            "evidence": evidence_dicts,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
     final_raw = call_llm(
         system_prompt=PLAN_WITH_EVIDENCE_JSON,

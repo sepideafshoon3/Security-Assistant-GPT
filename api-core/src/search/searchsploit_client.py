@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
-import subprocess
 import json
+import subprocess
+from dataclasses import dataclass
 
 
 @dataclass
@@ -29,7 +28,7 @@ class SearchsploitClient:
     def __init__(self, binary: str = "searchsploit") -> None:
         self.binary = binary
 
-    def search(self, query: str, limit: int = 5) -> List[SearchsploitResult]:
+    def search(self, query: str, limit: int = 5) -> list[SearchsploitResult]:
         """
         Run `searchsploit -j <query>` and return metadata results.
         """
@@ -57,7 +56,7 @@ class SearchsploitClient:
         except json.JSONDecodeError:
             return []
 
-        results: List[SearchsploitResult] = []
+        results: list[SearchsploitResult] = []
 
         # Typical structure: {"RESULTS_EXPLOIT": [...], "RESULTS_SHELLCODE": [...]}
         exploits = data.get("RESULTS_EXPLOIT", []) or []

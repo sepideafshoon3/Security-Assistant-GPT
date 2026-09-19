@@ -1,5 +1,5 @@
 # src/api/schemas_learning.py
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -9,15 +9,15 @@ class OnlineLearningEventRequest(BaseModel):
         ...,
         description="Logical type of the event, e.g. 'chat_turn', 'alert', 'feedback'",
     )
-    payload: Dict[str, Any] = Field(
+    payload: dict[str, Any] = Field(
         ...,
         description="Arbitrary JSON payload for the learning backend",
     )
-    risk_score: Optional[float] = Field(
+    risk_score: float | None = Field(
         None,
         description="Optional risk score [0.0-1.0 or 0-100]",
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: dict[str, Any] | None = Field(
         None,
         description="Optional meta info (source, tags, user_id, conversation_id, etc.)",
     )
@@ -30,7 +30,7 @@ class OnlineLearningEventResponse(BaseModel):
 
 
 class BulkOnlineLearningEventRequest(BaseModel):
-    events: List[OnlineLearningEventRequest] = Field(
+    events: list[OnlineLearningEventRequest] = Field(
         ...,
         description="List of events to send in bulk",
     )

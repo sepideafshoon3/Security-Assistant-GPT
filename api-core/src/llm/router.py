@@ -18,7 +18,7 @@ import logging
 import os
 import re
 from functools import lru_cache
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from src.llm.model_config import get_chat_model
 
@@ -40,9 +40,7 @@ _XAI_PREFIXES = (
 )
 
 # OpenRouter / multi-provider style prefixes that map to OpenAI.
-_OPENAI_PREFIXES = (
-    "openai/",
-)
+_OPENAI_PREFIXES = ("openai/",)
 
 # Model name fragments that indicate xAI Grok models.
 _XAI_NAME_RE = re.compile(
@@ -59,12 +57,10 @@ _BASE_URL_OPENAI = (
     "api.openai.com",
     "openai.com/v1",
 )
-_BASE_URL_OPENROUTER = (
-    "openrouter.ai",
-)
+_BASE_URL_OPENROUTER = ("openrouter.ai",)
 
 
-def is_openrouter_backend(base_url: Optional[str] = None) -> bool:
+def is_openrouter_backend(base_url: str | None = None) -> bool:
     """Return True when the effective API base URL is OpenRouter.
 
     Detection (any match wins):
@@ -73,7 +69,9 @@ def is_openrouter_backend(base_url: Optional[str] = None) -> bool:
       3. ``OPENAI_BASE_URL`` / ``XAI_BASE_URL`` / ``LLM_BASE_URL`` contain
          ``openrouter.ai``
     """
-    gateway = (os.getenv("LLM_GATEWAY") or os.getenv("LLM_BACKEND") or "").strip().lower()
+    gateway = (
+        (os.getenv("LLM_GATEWAY") or os.getenv("LLM_BACKEND") or "").strip().lower()
+    )
     if gateway in {"openrouter", "or"}:
         return True
     flag = (os.getenv("OPENROUTER") or "").strip().lower()
@@ -92,7 +90,7 @@ def is_openrouter_backend(base_url: Optional[str] = None) -> bool:
     return False
 
 
-def _detect_provider_from_base_url(base_url: Optional[str] = None) -> Optional[Provider]:
+def _detect_provider_from_base_url(base_url: str | None = None) -> Provider | None:
     """Inspect base URL (argument + common env vars) and return provider if known.
 
     Returns None when the URL is missing or unrecognized.
@@ -120,10 +118,10 @@ def _detect_provider_from_base_url(base_url: Optional[str] = None) -> Optional[P
 
 
 def detect_provider(
-    model: Optional[str] = None,
+    model: str | None = None,
     *,
-    explicit: Optional[str] = None,
-    base_url: Optional[str] = None,
+    explicit: str | None = None,
+    base_url: str | None = None,
 ) -> Provider:
     """Return ``openai`` or ``xai`` for the given model / override / base URL.
 
@@ -190,8 +188,8 @@ def normalize_model_for_provider(
     model: str,
     provider: Provider,
     *,
-    openrouter: Optional[bool] = None,
-    base_url: Optional[str] = None,
+    openrouter: bool | None = None,
+    base_url: str | None = None,
 ) -> str:
     """Normalize a model id for the active transport.
 
@@ -220,9 +218,11 @@ def normalize_model_for_provider(
 
     # Native / non-OpenRouter backends
     if provider == "xai":
-        return _strip_vendor_prefix(raw) if any(
-            raw.lower().startswith(p) for p in ("x-ai/", "xai/", "openai/")
-        ) else raw
+        return (
+            _strip_vendor_prefix(raw)
+            if any(raw.lower().startswith(p) for p in ("x-ai/", "xai/", "openai/"))
+            else raw
+        )
 
     # Native OpenAI: strip openrouter-style openai/ prefix if present
     if raw.lower().startswith("openai/"):
@@ -230,7 +230,7 @@ def normalize_model_for_provider(
     return raw
 
 
-def get_prompt_registry(provider_or_model: Optional[str] = None) -> Any:
+def get_prompt_registry(provider_or_model: str | None = None) -> Any:
     """Return a :class:`ContentRegistry` for the provider (or model name)."""
     provider = _resolve_provider_arg(provider_or_model)
     from src.prompts.layers.registry import build_registry_for_provider
@@ -245,13 +245,13 @@ def _cached_prompt_engine(provider: str) -> Any:
     return PromptEngine.for_provider(provider)
 
 
-def get_prompt_engine(provider_or_model: Optional[str] = None) -> Any:
+def get_prompt_engine(provider_or_model: str | None = None) -> Any:
     """Return a :class:`PromptEngine` for the provider (or model name)."""
     provider = _resolve_provider_arg(provider_or_model)
     return _cached_prompt_engine(provider)
 
 
-def _resolve_provider_arg(provider_or_model: Optional[str]) -> Provider:
+def _resolve_provider_arg(provider_or_model: str | None) -> Provider:
     if provider_or_model is None or not str(provider_or_model).strip():
         return detect_provider()
     value = str(provider_or_model).strip().lower()
@@ -326,14 +326,14 @@ class ModelProviderRouter:
 
     def detect_provider(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         *,
-        explicit: Optional[str] = None,
-        base_url: Optional[str] = None,
+        explicit: str | None = None,
+        base_url: str | None = None,
     ) -> Provider:
         return detect_provider(model, explicit=explicit, base_url=base_url)
 
-    def is_openrouter_backend(self, base_url: Optional[str] = None) -> bool:
+    def is_openrouter_backend(self, base_url: str | None = None) -> bool:
         return is_openrouter_backend(base_url)
 
     def normalize_model_for_provider(
@@ -341,17 +341,17 @@ class ModelProviderRouter:
         model: str,
         provider: Provider,
         *,
-        openrouter: Optional[bool] = None,
-        base_url: Optional[str] = None,
+        openrouter: bool | None = None,
+        base_url: str | None = None,
     ) -> str:
         return normalize_model_for_provider(
             model, provider, openrouter=openrouter, base_url=base_url
         )
 
-    def get_prompt_engine(self, provider_or_model: Optional[str] = None) -> Any:
+    def get_prompt_engine(self, provider_or_model: str | None = None) -> Any:
         return get_prompt_engine(provider_or_model)
 
-    def get_prompt_registry(self, provider_or_model: Optional[str] = None) -> Any:
+    def get_prompt_registry(self, provider_or_model: str | None = None) -> Any:
         return get_prompt_registry(provider_or_model)
 
     def create_advisor(self, config: Any) -> Any:
@@ -361,7 +361,7 @@ class ModelProviderRouter:
         return get_advisor(config)
 
 
-_ROUTER: Optional[ModelProviderRouter] = None
+_ROUTER: ModelProviderRouter | None = None
 
 
 def get_router() -> ModelProviderRouter:
@@ -372,4 +372,4 @@ def get_router() -> ModelProviderRouter:
     return _ROUTER
 
 
-AdvisorType = Union[Any, Any]  # OpenAILLMAdvisor | XaiLLMAdvisor (lazy)
+AdvisorType = Any  # OpenAILLMAdvisor | XaiLLMAdvisor (lazy)

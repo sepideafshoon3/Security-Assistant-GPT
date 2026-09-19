@@ -1,53 +1,51 @@
 # src/llm/openai_client.py
 
-import os
-import logging
 import datetime
+import functools
+import json
+import logging
+import os
+import re
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
-import tempfile
-import subprocess
-import shutil
-import functools
 import traceback
+from collections.abc import Iterator
 from html.parser import HTMLParser
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
-from urllib.request import Request, urlopen
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.request import Request, urlopen
 
-import json
-import re
 from openai import OpenAI
 from pydantic import BaseModel
 
-# ----------------------------------------------------------------------
-# NEW IMPORTS FOR PLANNER INTEGRATION
-# ----------------------------------------------------------------------
-from src.tools.utils import call_llm, parse_llm_json
-from src.search.tools_search import search_web, normalize_results
-from src.api.schemas.schemas import PlanDraft, FinalPlan, EvidenceItem
+from src.api.schemas.schemas import EvidenceItem, FinalPlan, PlanDraft
+from src.core.paths import BASE_DIR
+from src.helpers.load_last_dark_recon import load_latest_dark_recon_summary
+from src.llm.model_config import get_chat_model
+from src.prompts.layers import build_secure_chat_messages
+from src.prompts.openai.code_context import CODE_CONTEXT_PROMPT
+from src.prompts.openai.search_query import SEARCH_QUERY_PROMPT
+from src.search.local_web_search import web_search
 
 # ----------------------------------------------------------------------
 # Existing imports continued
 # ----------------------------------------------------------------------
 from src.security.audit import audit_log
-from src.core.models import ToolResult
-from src.search.exploitdb_client import ExploitMeta
-from src.helpers.load_last_dark_recon import load_latest_dark_recon_summary
-from src.search.local_web_search import web_search
-from src.tools.registry import get_all_tool_schemas, dispatch_tool_call, get_tool_names
+from src.tools.registry import dispatch_tool_call, get_all_tool_schemas
 
-from src.prompts.openai.search_query import SEARCH_QUERY_PROMPT
-from src.prompts.openai.code_context import CODE_CONTEXT_PROMPT
-from src.prompts.layers import build_secure_chat_messages
-from src.core.paths import BASE_DIR
-from src.llm.model_config import get_chat_model
+# ----------------------------------------------------------------------
+# NEW IMPORTS FOR PLANNER INTEGRATION
+# ----------------------------------------------------------------------
+from src.tools.utils import call_llm, parse_llm_json
 
 logger = logging.getLogger(__name__)
 
 
-def normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
+def normalize_openai_base_url(base_url: str | None) -> str | None:
     """Return a usable OpenAI API base URL.
 
     ``openai.com`` serves the web application and can respond with a
@@ -69,6 +67,7 @@ def normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
             return urlunparse(("https", "api.openai.com", "/v1", "", "", ""))
 
     return value.rstrip("/")
+
 
 # Resolved at import for backwards compatibility; prefer get_chat_model() at call sites.
 DEFAULT_CHAT_MODEL = get_chat_model()
@@ -133,10 +132,45 @@ def _sanitize_external_content(text: str, *, label: str = "content") -> str:
 
 
 _RESEARCH_STOPWORDS = {
-    "the", "and", "or", "but", "is", "are", "was", "were", "a", "an", "to", "of",
-    "in", "for", "on", "with", "by", "as", "at", "from", "that", "this", "it",
-    "be", "can", "could", "should", "would", "about", "into", "over", "after",
-    "before", "between", "latest", "newest", "recent", "current", "today",
+    "the",
+    "and",
+    "or",
+    "but",
+    "is",
+    "are",
+    "was",
+    "were",
+    "a",
+    "an",
+    "to",
+    "of",
+    "in",
+    "for",
+    "on",
+    "with",
+    "by",
+    "as",
+    "at",
+    "from",
+    "that",
+    "this",
+    "it",
+    "be",
+    "can",
+    "could",
+    "should",
+    "would",
+    "about",
+    "into",
+    "over",
+    "after",
+    "before",
+    "between",
+    "latest",
+    "newest",
+    "recent",
+    "current",
+    "today",
 }
 
 _RESEARCH_SYNONYMS = {
@@ -274,6 +308,7 @@ _SECURITY_QUERY_HINTS = (
     "dark_recon",
 )
 
+
 # define for injection auto.
 def _is_security_query(messages: list) -> bool:
     """
@@ -288,7 +323,6 @@ def _is_security_query(messages: list) -> bool:
     if not user_text:
         return False
     return any(hint in user_text for hint in _SECURITY_QUERY_HINTS)
-
 
 
 # Add this decorator definition (preferably near the top, after imports)
@@ -310,26 +344,26 @@ def log_method(func):
         )
         try:
             result = func(*args, **kwargs)
-            log.info(
-                f"[EXIT]  {cls_name}.{method_name}  →  {result!r:.120}"
-            )
+            log.info(f"[EXIT]  {cls_name}.{method_name}  →  {result!r:.120}")
             return result
         except Exception as exc:
             tb = traceback.format_exc()
-            log.error(
-                f"[ERROR] {cls_name}.{method_name}  raised={exc!r}\n{tb}"
-            )
+            log.error(f"[ERROR] {cls_name}.{method_name}  raised={exc!r}\n{tb}")
             raise
+
     return wrapper
+
+
 # ----------------------------------------------------------------------
 # PLANNER IMPLEMENTATION (added as per request)
 # ----------------------------------------------------------------------
-def _auto_answer_questions(questions: List[Dict[str, str]]) -> Dict[str, str]:
+def _auto_answer_questions(questions: list[dict[str, str]]) -> dict[str, str]:
     """
     Very simple auto‑answerer used for fully‑automated runs.
     Every question is answered with the placeholder “skip”.
     """
     return {q["id"]: "skip" for q in questions}
+
 
 def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalPlan:
     """
@@ -342,8 +376,9 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     4. Use the local tool registry (research_search) for batch web search.
     5. Ask the LLM to synthesize the final plan with citations.
     """
-    from src.tools.registry import dispatch_tool_call
     import datetime as _dt
+
+    from src.tools.registry import dispatch_tool_call
 
     llm_log = _setup_daily_llm_logger()
     base_url = os.getenv("OPENAI_BASE_URL", "").strip()
@@ -354,22 +389,29 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     # -----------------------------------------------------------------
     logger.info("=== STEP 1 - Draft plan ===")
     try:
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            "event": "llm_request",
-            "layer": "planner_draft",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "user_request_len": len(user_request or ""),
-        }, ensure_ascii=False))
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "event": "llm_request",
+                    "layer": "planner_draft",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "user_request_len": len(user_request or ""),
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
     # Single-layer path via PromptEngine (backward-compatible system+user strings)
     from src.prompts.layers import build_planner_prompts
 
-    _planner_draft = build_planner_prompts(user_request=user_request, with_evidence=False)
+    _planner_draft = build_planner_prompts(
+        user_request=user_request, with_evidence=False
+    )
     draft_raw = call_llm(
         system_prompt=_planner_draft.system,
         user_prompt=_planner_draft.user or user_request,
@@ -377,16 +419,25 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
 
     # Log draft result
     try:
-        draft_text = json.dumps(draft_raw, ensure_ascii=False, default=str)[:10_000] if draft_raw else ""
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            "event": "llm_response",
-            "layer": "planner_draft",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "text": draft_text,
-        }, ensure_ascii=False))
+        draft_text = (
+            json.dumps(draft_raw, ensure_ascii=False, default=str)[:10_000]
+            if draft_raw
+            else ""
+        )
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "event": "llm_response",
+                    "layer": "planner_draft",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "text": draft_text,
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
@@ -422,35 +473,44 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     # -----------------------------------------------------------------
     # 5. Use tool registry for batch search (research_search tool)
     # -----------------------------------------------------------------
-    search_result = dispatch_tool_call("research_search", {
-        "queries": queries,
-        "max_results_per_query": 10,
-    })
+    search_result = dispatch_tool_call(
+        "research_search",
+        {
+            "queries": queries,
+            "max_results_per_query": 10,
+        },
+    )
 
     raw_results = search_result.get("results", [])
     logger.info(
         "Planner research_search: %d queries -> %d results",
-        len(queries), len(raw_results),
+        len(queries),
+        len(raw_results),
     )
 
     # Log research step
     try:
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            "event": "llm_research",
-            "layer": "planner_research",
-            "queries_count": len(queries),
-            "results_count": len(raw_results),
-            "queries": [str(q)[:200] for q in queries],
-        }, ensure_ascii=False))
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "event": "llm_research",
+                    "layer": "planner_research",
+                    "queries_count": len(queries),
+                    "results_count": len(raw_results),
+                    "queries": [str(q)[:200] for q in queries],
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
     # -----------------------------------------------------------------
     # 6. Build evidence items from tool results
     # -----------------------------------------------------------------
-    evidence_items: List[EvidenceItem] = []
-    now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    evidence_items: list[EvidenceItem] = []
+    now_iso = _dt.datetime.now(_dt.UTC).isoformat()
 
     for idx, res in enumerate(raw_results, start=1):
         evidence_items.append(
@@ -472,26 +532,37 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     evidence_dicts = []
     for e in evidence_items:
         if hasattr(e, "dict"):
-            evidence_dicts.append(e.dict() if callable(getattr(e, "dict", None)) else dict(e))
+            evidence_dicts.append(
+                e.dict() if callable(getattr(e, "dict", None)) else dict(e)
+            )
         else:
             evidence_dicts.append(dict(e))
 
-    synthesis_prompt = json.dumps({
-        "user_request": user_request,
-        "answers": answers,
-        "evidence": evidence_dicts,
-    }, ensure_ascii=False, indent=2)
+    synthesis_prompt = json.dumps(
+        {
+            "user_request": user_request,
+            "answers": answers,
+            "evidence": evidence_dicts,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
     try:
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            "event": "llm_request",
-            "layer": "planner_synthesis",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "evidence_count": len(evidence_items),
-        }, ensure_ascii=False))
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "event": "llm_request",
+                    "layer": "planner_synthesis",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "evidence_count": len(evidence_items),
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
@@ -502,7 +573,9 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
         with_evidence=True,
         evidence_variables={
             "user_request": user_request,
-            "research_results_json": json.dumps(evidence_items, ensure_ascii=False, default=str),
+            "research_results_json": json.dumps(
+                evidence_items, ensure_ascii=False, default=str
+            ),
             "synthesis_prompt": synthesis_prompt,
         },
     )
@@ -513,16 +586,25 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
 
     # Log synthesis result
     try:
-        final_text = json.dumps(final_raw, ensure_ascii=False, default=str)[:10_000] if final_raw else ""
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            "event": "llm_response",
-            "layer": "planner_synthesis",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "text": final_text,
-        }, ensure_ascii=False))
+        final_text = (
+            json.dumps(final_raw, ensure_ascii=False, default=str)[:10_000]
+            if final_raw
+            else ""
+        )
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "event": "llm_response",
+                    "layer": "planner_synthesis",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "text": final_text,
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
@@ -545,6 +627,7 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
     )
     return final_plan
 
+
 # ----------------------------------------------------------------------
 # END OF PLANNER INTEGRATION
 # ----------------------------------------------------------------------
@@ -553,7 +636,7 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
 class _ResearchHTMLStripper(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
-        self._texts: List[str] = []
+        self._texts: list[str] = []
         self._skip = False
 
     def handle_starttag(self, tag, attrs) -> None:
@@ -572,15 +655,15 @@ class _ResearchHTMLStripper(HTMLParser):
         return re.sub(r"\s+", " ", " ".join(self._texts)).strip()
 
 
-def _research_tokenize(text: str) -> List[str]:
+def _research_tokenize(text: str) -> list[str]:
     tokens = [t for t in re.findall(r"[a-zA-Z0-9]+", (text or "").lower()) if t]
     return [t for t in tokens if t not in _RESEARCH_STOPWORDS]
 
 
-def _research_extract_keywords(text: str, max_keywords: int = 8) -> List[str]:
+def _research_extract_keywords(text: str, max_keywords: int = 8) -> list[str]:
     tokens = _research_tokenize(text)
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for t in tokens:
         if t in seen:
             continue
@@ -591,7 +674,7 @@ def _research_extract_keywords(text: str, max_keywords: int = 8) -> List[str]:
     return out
 
 
-def _research_stable_unique(seq: List[str]) -> List[str]:
+def _research_stable_unique(seq: list[str]) -> list[str]:
     seen = set()
     out = []
     for item in seq:
@@ -601,7 +684,9 @@ def _research_stable_unique(seq: List[str]) -> List[str]:
     return out
 
 
-def _research_expand_query_layers(keywords: List[str], user_text: str) -> Dict[str, List[str]]:
+def _research_expand_query_layers(
+    keywords: list[str], user_text: str
+) -> dict[str, list[str]]:
     layer_a = []
     if user_text:
         layer_a.append(user_text.strip())
@@ -637,7 +722,7 @@ def _research_sanitize_query(q: str, *, max_len: int = 160) -> str:
     return q
 
 
-def _research_parse_json_object(text: str) -> Optional[Dict[str, Any]]:
+def _research_parse_json_object(text: str) -> dict[str, Any] | None:
     if not text:
         return None
     try:
@@ -647,7 +732,7 @@ def _research_parse_json_object(text: str) -> Optional[Dict[str, Any]]:
     except Exception:
         pass
     try:
-        m = re.search(r"\{.*\}", text, flags=re.S)
+        m = re.search(r"\{.*\}", text, flags=re.DOTALL)
         if m:
             obj = json.loads(m.group(0))
             if isinstance(obj, dict):
@@ -657,10 +742,10 @@ def _research_parse_json_object(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _research_parse_targets(value: Any) -> List[str]:
+def _research_parse_targets(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    out: List[str] = []
+    out: list[str] = []
     for item in value:
         if not isinstance(item, str):
             continue
@@ -670,14 +755,14 @@ def _research_parse_targets(value: Any) -> List[str]:
     return out
 
 
-def _research_is_redteam_query(text: str, targets: Optional[List[str]] = None) -> bool:
+def _research_is_redteam_query(text: str, targets: list[str] | None = None) -> bool:
     if targets and any(t in targets for t in ("cve", "exploit", "poc")):
         return True
     t = (text or "").lower()
     return any(h in t for h in _REDTEAM_HINTS)
 
 
-def _research_needs_github_search(text: str, targets: Optional[List[str]] = None) -> bool:
+def _research_needs_github_search(text: str, targets: list[str] | None = None) -> bool:
     if targets and any(t in targets for t in ("github", "repo", "code")):
         return True
     t = (text or "").lower()
@@ -685,14 +770,14 @@ def _research_needs_github_search(text: str, targets: Optional[List[str]] = None
 
 
 def _research_expand_github_layers(
-    base_queries: List[str],
+    base_queries: list[str],
     user_text: str,
-    keywords: List[str],
+    keywords: list[str],
     *,
     redteam: bool = False,
     max_queries: int = 8,
-) -> List[str]:
-    seeds: List[str] = []
+) -> list[str]:
+    seeds: list[str] = []
     for q in base_queries or []:
         s = _research_sanitize_query(q)
         if s and s not in seeds:
@@ -706,7 +791,7 @@ def _research_expand_github_layers(
     if redteam:
         suffixes.extend(["exploit", "poc", "cve"])
 
-    queries: List[str] = []
+    queries: list[str] = []
     for seed in seeds:
         if not seed:
             continue
@@ -723,19 +808,38 @@ def _research_expand_github_layers(
 def _research_detect_missing_package_version(text: str) -> bool:
     t = (text or "").lower()
     indicators = [
-        "not in dataset", "not in the dataset", "version not in dataset",
-        "version not found", "unknown version", "not found in dataset",
-        "not in training data", "new version", "latest version",
-        "out of date dataset", "dataset is old",
+        "not in dataset",
+        "not in the dataset",
+        "version not in dataset",
+        "version not found",
+        "unknown version",
+        "not found in dataset",
+        "not in training data",
+        "new version",
+        "latest version",
+        "out of date dataset",
+        "dataset is old",
     ]
     package_hints = [
-        "package", "module", "library", "dependency", "pip", "npm", "pypi",
-        "crate", "crates", "maven", "nuget", "gem", "rubygem", "packagist",
+        "package",
+        "module",
+        "library",
+        "dependency",
+        "pip",
+        "npm",
+        "pypi",
+        "crate",
+        "crates",
+        "maven",
+        "nuget",
+        "gem",
+        "rubygem",
+        "packagist",
     ]
     return any(i in t for i in indicators) and any(h in t for h in package_hints)
 
 
-def _research_guess_package_name(text: str) -> Optional[str]:
+def _research_guess_package_name(text: str) -> str | None:
     if not text:
         return None
     patterns = [
@@ -754,19 +858,23 @@ def _research_guess_package_name(text: str) -> Optional[str]:
     return None
 
 
-def _research_extend_layers_for_package(layers: Dict[str, List[str]], package_name: Optional[str]) -> Dict[str, List[str]]:
+def _research_extend_layers_for_package(
+    layers: dict[str, list[str]], package_name: str | None
+) -> dict[str, list[str]]:
     if not package_name:
         return layers
     layer_b = list(layers.get("layer_b") or [])
     layer_c = list(layers.get("layer_c") or [])
 
-    layer_b.extend([
-        f"{package_name} latest version",
-        f"{package_name} release notes",
-        f"{package_name} changelog",
-        f"{package_name} install instructions",
-        f"{package_name} documentation",
-    ])
+    layer_b.extend(
+        [
+            f"{package_name} latest version",
+            f"{package_name} release notes",
+            f"{package_name} changelog",
+            f"{package_name} install instructions",
+            f"{package_name} documentation",
+        ]
+    )
 
     for domain in _RESEARCH_PACKAGE_REGISTRIES:
         layer_c.append(f"site:{domain} {package_name}")
@@ -789,8 +897,11 @@ def _research_canonicalize_url(url: str) -> str:
         scheme = (p.scheme or "http").lower()
         netloc = (p.netloc or "").lower()
         path = p.path or ""
-        query = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
-                 if not k.lower().startswith("utm_")]
+        query = [
+            (k, v)
+            for k, v in parse_qsl(p.query, keep_blank_values=True)
+            if not k.lower().startswith("utm_")
+        ]
         query = urlencode(sorted(query))
         return urlunparse((scheme, netloc, path, "", query, ""))
     except Exception:
@@ -807,7 +918,9 @@ def _research_extract_domain(url: str) -> str:
 
 
 def _research_extract_title(html_text: str) -> str:
-    m = re.search(r"<title[^>]*>(.*?)</title>", html_text or "", re.IGNORECASE | re.DOTALL)
+    m = re.search(
+        r"<title[^>]*>(.*?)</title>", html_text or "", re.IGNORECASE | re.DOTALL
+    )
     if not m:
         return ""
     return re.sub(r"\s+", " ", m.group(1)).strip()
@@ -822,7 +935,7 @@ def _research_strip_html(html_text: str) -> str:
     return text
 
 
-def _research_extract_date(text: str) -> Optional[str]:
+def _research_extract_date(text: str) -> str | None:
     if not text:
         return None
     m = re.findall(r"\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b", text)
@@ -842,8 +955,18 @@ def _research_extract_date(text: str) -> Optional[str]:
     if m2:
         mon, day, year = m2[0]
         months = {
-            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+            "jan": 1,
+            "feb": 2,
+            "mar": 3,
+            "apr": 4,
+            "may": 5,
+            "jun": 6,
+            "jul": 7,
+            "aug": 8,
+            "sep": 9,
+            "oct": 10,
+            "nov": 11,
+            "dec": 12,
         }
         try:
             mo = months[mon.strip().lower()[:3]]
@@ -853,7 +976,7 @@ def _research_extract_date(text: str) -> Optional[str]:
     return None
 
 
-def _research_compute_recency_score(date_str: Optional[str]) -> float:
+def _research_compute_recency_score(date_str: str | None) -> float:
     if not date_str:
         return 0.0
     try:
@@ -861,8 +984,7 @@ def _research_compute_recency_score(date_str: Optional[str]) -> float:
     except Exception:
         return 0.0
     days = (datetime.date.today() - d).days
-    if days < 0:
-        days = 0
+    days = max(days, 0)
     return max(0.0, 1.0 - min(days, 365) / 365.0)
 
 
@@ -880,7 +1002,7 @@ def _research_compute_reliability_score(url: str, title: str) -> float:
     return max(0.0, min(1.0, score))
 
 
-def _research_split_claims(text: str, max_claims: int = 3) -> List[str]:
+def _research_split_claims(text: str, max_claims: int = 3) -> list[str]:
     if not text:
         return []
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
@@ -894,7 +1016,7 @@ def _research_jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b)
 
 
-def _research_pdf_to_text_if_available(pdf_bytes: bytes) -> Optional[str]:
+def _research_pdf_to_text_if_available(pdf_bytes: bytes) -> str | None:
     if not pdf_bytes:
         return None
     pdftotext = shutil.which("pdftotext")
@@ -906,11 +1028,13 @@ def _research_pdf_to_text_if_available(pdf_bytes: bytes) -> Optional[str]:
         with open(pdf_path, "wb") as f:
             f.write(pdf_bytes)
         try:
-            subprocess.check_call([pdftotext, pdf_path, txt_path],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+            subprocess.check_call(
+                [pdftotext, pdf_path, txt_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             if os.path.exists(txt_path):
-                with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(txt_path, encoding="utf-8", errors="ignore") as f:
                     return f.read()
         except Exception:
             return None
@@ -925,13 +1049,15 @@ class DailyFileHandler(logging.Handler):
     - Switches file automatically when local date changes.
     """
 
-    def __init__(self, log_dir: Path, prefix: str = "llm", encoding: str = "utf-8") -> None:
+    def __init__(
+        self, log_dir: Path, prefix: str = "llm", encoding: str = "utf-8"
+    ) -> None:
         super().__init__()
         self.log_dir = Path(log_dir)
         self.prefix = prefix
         self.encoding = encoding
         self._lock = threading.RLock()
-        self._current_date: Optional[str] = None
+        self._current_date: str | None = None
         self._fp = None
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -981,7 +1107,7 @@ def _setup_daily_llm_logger() -> logging.Logger:
     if log_dir_env:
         log_dir = Path(log_dir_env).expanduser()
     else:
-        log_dir = (BASE_DIR / "logs" / "llm")
+        log_dir = BASE_DIR / "logs" / "llm"
 
     llm_logger = logging.getLogger("mrrobot.llm")
     llm_logger.setLevel(logging.INFO)
@@ -1003,18 +1129,21 @@ class LLMConfig(BaseModel):
     max_tokens: int = 65536
     temperature: float = 0.5
     top_p: float = 1.0
-    assistant_id: Optional[str] = None
+    assistant_id: str | None = None
 
     # <-- NEW FLAG: turn planner on/off globally
-    enable_planner: bool = True   # set to False to disable
+    enable_planner: bool = True  # set to False to disable
 
     # --- NEW: web search / internet access ---
     enable_web_search: bool = False
-    web_search_external_access: bool = True  # True = live internet, False = cached/offline
+    web_search_external_access: bool = (
+        True  # True = live internet, False = cached/offline
+    )
 
     # Optional explicit provider override ("openai" | "xai"). When None, the
     # router auto-detects from the model name / LLM_PROVIDER env.
-    provider: Optional[str] = None
+    provider: str | None = None
+
 
 def load_llm_config(config_dir: Path) -> LLMConfig:
     import yaml
@@ -1050,16 +1179,21 @@ def load_llm_config(config_dir: Path) -> LLMConfig:
         max_tokens=max_tokens,
         temperature=float(llm_cfg.get("temperature", 0.2)),
         top_p=float(llm_cfg.get("top_p", 1.0)),
-        assistant_id=str(llm_cfg.get("assistant_id")).strip() or None
-        if llm_cfg.get("assistant_id")
-        else None,
+        assistant_id=(
+            str(llm_cfg.get("assistant_id")).strip() or None
+            if llm_cfg.get("assistant_id")
+            else None
+        ),
         # <-- NEW: read the planner flag
         enable_planner=bool(llm_cfg.get("enable_planner", True)),
         # --- NEW ---
         enable_web_search=bool(llm_cfg.get("enable_web_search", False)),
-        web_search_external_access=bool(llm_cfg.get("web_search_external_access", True)),
+        web_search_external_access=bool(
+            llm_cfg.get("web_search_external_access", True)
+        ),
         provider=provider,
     )
+
 
 class OpenAILLMAdvisor:
     """Defensive-only advisor.
@@ -1086,6 +1220,7 @@ class OpenAILLMAdvisor:
         "nodejs": "js",
         "deno": "js",
     }
+
     @log_method
     def __init__(self, config: LLMConfig):
         self.config = config
@@ -1138,8 +1273,9 @@ class OpenAILLMAdvisor:
         if model_name.startswith("gpt-5"):
             return False
         return True
+
     @staticmethod
-    def _clean_inbound_text(text: Optional[str], *, max_len: int = 24_000) -> Optional[str]:
+    def _clean_inbound_text(text: str | None, *, max_len: int = 24_000) -> str | None:
         """Normalize and sanitize pass-through prompts/messages.
 
         - Truncates to ``max_len`` to prevent huge payloads.
@@ -1157,19 +1293,24 @@ class OpenAILLMAdvisor:
         return t
 
     @classmethod
-    def _normalize_lang_tag(cls, lang: Optional[str]) -> Optional[str]:
+    def _normalize_lang_tag(cls, lang: str | None) -> str | None:
         if not lang:
             return None
         key = str(lang).strip().lower()
         if not key:
             return None
         return cls._SCRIPT_LANG_ALIASES.get(key, key)
+
     @classmethod
     def _is_script_line(cls, line: str) -> bool:
         s = line.strip()
         if not s:
             return False
-        if re.match(r"^#!.*\b(bash|sh|zsh|python|python3|ruby|node|nodejs|deno)\b", s, re.I):
+        if re.match(
+            r"^#!.*\b(bash|sh|zsh|python|python3|ruby|node|nodejs|deno)\b",
+            s,
+            re.IGNORECASE,
+        ):
             return True
         if re.match(r"^\s*\$\s+", line):
             return True
@@ -1181,7 +1322,9 @@ class OpenAILLMAdvisor:
             return True
         if re.match(r"^\s*(module|require|puts)\b", line):
             return True
-        if re.match(r"^\s*(const|let|var|function|async\s+function|import|export)\b", line):
+        if re.match(
+            r"^\s*(const|let|var|function|async\s+function|import|export)\b", line
+        ):
             return True
         if re.match(r"^\s*console\.log\b", line):
             return True
@@ -1193,15 +1336,20 @@ class OpenAILLMAdvisor:
         if re.match(r"^\s*\w+\s*=\s*[^=]+$", line):
             return True
         return False
+
     @classmethod
-    def _guess_script_language(cls, lines: List[str]) -> Optional[str]:
+    def _guess_script_language(cls, lines: list[str]) -> str | None:
         scores = {"bash": 0, "python": 0, "ruby": 0, "js": 0}
         strong_bash = False
         for line in lines:
             s = line.strip()
             if not s:
                 continue
-            m = re.match(r"^#!.*\b(?P<lang>bash|sh|zsh|python|python3|ruby|node|nodejs|deno)\b", s, re.I)
+            m = re.match(
+                r"^#!.*\b(?P<lang>bash|sh|zsh|python|python3|ruby|node|nodejs|deno)\b",
+                s,
+                re.IGNORECASE,
+            )
             if m:
                 return cls._normalize_lang_tag(m.group("lang"))
             if re.match(r"^\s*(def|class)\s+\w+", line):
@@ -1213,7 +1361,9 @@ class OpenAILLMAdvisor:
                 scores["python"] += 3
             if re.match(r"^\s*(module|require|puts)\b", line):
                 scores["ruby"] += 2
-            if re.match(r"^\s*(const|let|var|function|async\s+function|import|export)\b", line):
+            if re.match(
+                r"^\s*(const|let|var|function|async\s+function|import|export)\b", line
+            ):
                 scores["js"] += 2
             if re.match(r"^\s*console\.log\b", line):
                 scores["js"] += 2
@@ -1234,24 +1384,29 @@ class OpenAILLMAdvisor:
         if score == 1 and not strong_bash:
             return None
         return lang
+
     @classmethod
     def _wrap_loose_script_blocks(cls, text: str) -> str:
         if not text:
             return text
         lines = text.splitlines()
-        out: List[str] = []
+        out: list[str] = []
         i = 0
         while i < len(lines):
             line = lines[i]
             if cls._is_script_line(line):
-                block: List[str] = []
+                block: list[str] = []
                 while i < len(lines):
                     line = lines[i]
                     if cls._is_script_line(line):
                         block.append(line)
                         i += 1
                         continue
-                    if not line.strip() and i + 1 < len(lines) and cls._is_script_line(lines[i + 1]):
+                    if (
+                        not line.strip()
+                        and i + 1 < len(lines)
+                        and cls._is_script_line(lines[i + 1])
+                    ):
                         block.append(line)
                         i += 1
                         continue
@@ -1267,16 +1422,17 @@ class OpenAILLMAdvisor:
                 out.append(line)
                 i += 1
         return "\n".join(out)
+
     @classmethod
     def _normalize_code_blocks(cls, text: str) -> str:
         if not text:
             return text
         lines = text.splitlines()
-        out_lines: List[str] = []
-        text_buffer: List[str] = []
+        out_lines: list[str] = []
+        text_buffer: list[str] = []
         in_code = False
-        fence_type: Optional[str] = None
-        code_lang: Optional[str] = None
+        fence_type: str | None = None
+        code_lang: str | None = None
 
         def flush_text() -> None:
             if not text_buffer:
@@ -1285,15 +1441,17 @@ class OpenAILLMAdvisor:
             out_lines.extend(wrapped.splitlines())
             text_buffer.clear()
 
-        def emit_code_open(lang: Optional[str]) -> None:
+        def emit_code_open(lang: str | None) -> None:
             if lang:
                 out_lines.append(f"[code {lang}]")
             else:
                 out_lines.append("[code]")
 
         for line in lines:
-            bb_open = re.match(r"^\[code(?:(?:=|\s+)([A-Za-z0-9_-]+))?\]\s*$", line, re.I)
-            bb_close = re.match(r"^\[/code\]\s*$", line, re.I)
+            bb_open = re.match(
+                r"^\[code(?:(?:=|\s+)([A-Za-z0-9_-]+))?\]\s*$", line, re.IGNORECASE
+            )
+            bb_close = re.match(r"^\[/code\]\s*$", line, re.IGNORECASE)
             md_open = re.match(r"^```(\w+)?\s*$", line)
             md_close = re.match(r"^```\s*$", line)
 
@@ -1301,12 +1459,16 @@ class OpenAILLMAdvisor:
                 flush_text()
                 in_code = True
                 fence_type = "bbcode" if bb_open else "markdown"
-                code_lang = cls._normalize_lang_tag((bb_open.group(1) if bb_open else md_open.group(1)))
+                code_lang = cls._normalize_lang_tag(
+                    bb_open.group(1) if bb_open else md_open.group(1)
+                )
                 emit_code_open(code_lang)
                 continue
 
             if in_code:
-                if (fence_type == "bbcode" and bb_close) or (fence_type == "markdown" and md_close):
+                if (fence_type == "bbcode" and bb_close) or (
+                    fence_type == "markdown" and md_close
+                ):
                     out_lines.append("[/code]")
                     in_code = False
                     fence_type = None
@@ -1345,6 +1507,7 @@ class OpenAILLMAdvisor:
     def _backend_supports_reasoning(self) -> bool:
         """Only real OpenAI supports the ``reasoning`` parameter with ``summary``."""
         return self._is_openai_backend()
+
     @staticmethod
     def _extract_section(text: str, title: str) -> str:
         """Extract a section body by title."""
@@ -1366,17 +1529,18 @@ class OpenAILLMAdvisor:
         if not m:
             return ""
         return (m.group(1) or "").strip()
+
     @log_method
     def _log_research_event(
         self,
         stage: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         *,
         max_len: int = 1200,
         max_list: int = 50,
     ) -> None:
         try:
-            safe_payload: Dict[str, Any] = {}
+            safe_payload: dict[str, Any] = {}
             for k, v in (payload or {}).items():
                 if isinstance(v, str):
                     safe_payload[k] = self._clean_inbound_text(v, max_len=max_len) or ""
@@ -1409,8 +1573,8 @@ class OpenAILLMAdvisor:
         output_text: str,
         resp: Any = None,
         response: Any = None,
-        extra: Optional[Dict[str, Any]] = None,
-        elapsed_ms: Optional[float] = None,
+        extra: dict[str, Any] | None = None,
+        elapsed_ms: float | None = None,
     ) -> None:
         """Log a **complete** LLM interaction to the daily JSONL logger.
 
@@ -1444,7 +1608,7 @@ class OpenAILLMAdvisor:
             base_url = os.getenv("OPENAI_BASE_URL", "").strip()
 
             # ── Token usage ──
-            usage_data: Dict[str, Any] = {}
+            usage_data: dict[str, Any] = {}
             if api == "responses" and resp is not None:
                 usage = getattr(resp, "usage", None)
                 if usage:
@@ -1462,7 +1626,7 @@ class OpenAILLMAdvisor:
                         "tokens_completion": getattr(usage, "completion_tokens", None),
                     }
 
-            common: Dict[str, Any] = {
+            common: dict[str, Any] = {
                 "layer": layer,
                 "api": api,
                 "model": model,
@@ -1475,15 +1639,20 @@ class OpenAILLMAdvisor:
             full_text = (output_text or "")[:1_000_000]
             if len(output_text or "") > 1_000_000:
                 full_text += "...[TRUNCATED_AT_1MB]"
-            self.llm_logger.info(json.dumps({
-                "ts": ts,
-                "event": "llm_response",
-                **common,
-                **usage_data,
-                "text_length": len(output_text or ""),
-                "text": full_text,
-                **(extra or {}),
-            }, ensure_ascii=False))
+            self.llm_logger.info(
+                json.dumps(
+                    {
+                        "ts": ts,
+                        "event": "llm_response",
+                        **common,
+                        **usage_data,
+                        "text_length": len(output_text or ""),
+                        "text": full_text,
+                        **(extra or {}),
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
             # ── 2) Full reasoning / summary (10 MB cap) ──
             reasoning = ""
@@ -1499,35 +1668,48 @@ class OpenAILLMAdvisor:
                 except Exception:
                     pass
             full_reasoning = (str(reasoning) if reasoning else "")[:10_000_000]
-            self.llm_logger.info(json.dumps({
-                "ts": ts,
-                "event": "llm_reasoning",
-                **common,
-                "missing": not bool(full_reasoning),
-                "reasoning_length": len(str(reasoning) if reasoning else ""),
-                "reasoning": full_reasoning,
-            }, ensure_ascii=False))
+            self.llm_logger.info(
+                json.dumps(
+                    {
+                        "ts": ts,
+                        "event": "llm_reasoning",
+                        **common,
+                        "missing": not bool(full_reasoning),
+                        "reasoning_length": len(str(reasoning) if reasoning else ""),
+                        "reasoning": full_reasoning,
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
             # ── 3) Thinking section (embedded in output text) ──
             thinking = ""
             if hasattr(self, "_extract_section"):
                 thinking = self._extract_section(output_text or "", "Thinking")
-            self.llm_logger.info(json.dumps({
-                "ts": ts,
-                "event": "llm_thinking",
-                **common,
-                "missing": not bool(thinking),
-                "thinking_length": len(thinking) if thinking else 0,
-                "thinking": thinking if thinking else None,
-            }, ensure_ascii=False))
+            self.llm_logger.info(
+                json.dumps(
+                    {
+                        "ts": ts,
+                        "event": "llm_thinking",
+                        **common,
+                        "missing": not bool(thinking),
+                        "thinking_length": len(thinking) if thinking else 0,
+                        "thinking": thinking if thinking else None,
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
             # ── Audit log ──
-            audit_log("llm_call", {
-                **common,
-                **usage_data,
-                "text_length": len(output_text or ""),
-                "reasoning_length": len(str(reasoning) if reasoning else ""),
-            })
+            audit_log(
+                "llm_call",
+                {
+                    **common,
+                    **usage_data,
+                    "text_length": len(output_text or ""),
+                    "reasoning_length": len(str(reasoning) if reasoning else ""),
+                },
+            )
         except Exception:
             pass
 
@@ -1540,8 +1722,8 @@ class OpenAILLMAdvisor:
     # For brevity, the remaining methods from the original file are omitted
     # but are assumed to be present exactly as in the original source.
     @log_method
-    def _pre_search_llm_query_plan(self, user_text: str) -> Dict[str, Any]:
-        plan: Dict[str, Any] = {"needs_search": False, "queries": [], "reason": ""}
+    def _pre_search_llm_query_plan(self, user_text: str) -> dict[str, Any]:
+        plan: dict[str, Any] = {"needs_search": False, "queries": [], "reason": ""}
         if not self.config.enabled or self.client is None:
             return plan
 
@@ -1564,16 +1746,16 @@ class OpenAILLMAdvisor:
         try:
             if self._should_use_responses_api(model_name):
                 _api_type = "responses"
-                create_kwargs: Dict[str, Any] = {
+                create_kwargs: dict[str, Any] = {
                     "model": model_name,
                     "instructions": search_prompt_with_date,
                     "input": [
-                    {
-                    "role": "system",
-                    "content": search_prompt_with_date,
-                    },
-                    {"role": "user", "content": raw},
-                    ],  
+                        {
+                            "role": "system",
+                            "content": search_prompt_with_date,
+                        },
+                        {"role": "user", "content": raw},
+                    ],
                     "max_output_tokens": 512,
                 }
                 if self._responses_supports_sampling(model_name):
@@ -1584,12 +1766,12 @@ class OpenAILLMAdvisor:
                 output_text = self._extract_responses_text(resp) or ""
             else:
                 _api_type = "chat.completions"
-                messages: List[Dict[str, str]] = [
-                {
-                    "role": "system",
-                    "content": search_prompt_with_date,
-                },
-                {"role": "user", "content": raw},
+                messages: list[dict[str, str]] = [
+                    {
+                        "role": "system",
+                        "content": search_prompt_with_date,
+                    },
+                    {"role": "user", "content": raw},
                 ]
                 resp = self.client.chat.completions.create(
                     model=model_name,
@@ -1640,7 +1822,7 @@ class OpenAILLMAdvisor:
             queries_raw = parsed.get("queries") or []
             targets = _research_parse_targets(parsed.get("targets"))
             reason = str(parsed.get("reason") or "").strip()
-            cleaned: List[str] = []
+            cleaned: list[str] = []
             if isinstance(queries_raw, list):
                 for q in queries_raw:
                     if not isinstance(q, str):
@@ -1676,8 +1858,9 @@ class OpenAILLMAdvisor:
             max_len=50_000,
         )
         return plan
+
     @log_method
-    def _pre_search_code_context(self, user_text: str) -> Optional[Dict[str, Any]]:
+    def _pre_search_code_context(self, user_text: str) -> dict[str, Any] | None:
         if not self.config.enabled or self.client is None:
             return None
 
@@ -1700,7 +1883,7 @@ class OpenAILLMAdvisor:
         try:
             if self._should_use_responses_api(model_name):
                 _api_type = "responses"
-                create_kwargs: Dict[str, Any] = {
+                create_kwargs: dict[str, Any] = {
                     "model": model_name,
                     "instructions": code_prompt_with_date,
                     "input": [
@@ -1720,7 +1903,7 @@ class OpenAILLMAdvisor:
                 output_text = self._extract_responses_text(resp) or ""
             else:
                 _api_type = "chat.completions"
-                messages: List[Dict[str, str]] = [
+                messages: list[dict[str, str]] = [
                     {
                         "role": "system",
                         "content": code_prompt_with_date,
@@ -1775,7 +1958,7 @@ class OpenAILLMAdvisor:
         queries_raw = parsed.get("queries") or []
         targets = _research_parse_targets(parsed.get("targets"))
         reason = str(parsed.get("reason") or "").strip()
-        cleaned: List[str] = []
+        cleaned: list[str] = []
         if isinstance(queries_raw, list):
             for q in queries_raw:
                 if not isinstance(q, str):
@@ -1820,8 +2003,11 @@ class OpenAILLMAdvisor:
             max_len=50_000,
         )
         return plan
+
     @log_method
-    def _pre_response_research_context(self, messages: List[Dict[str, str]]) -> Optional[str]:
+    def _pre_response_research_context(
+        self, messages: list[dict[str, str]]
+    ) -> str | None:
         if not messages:
             return None
 
@@ -1834,13 +2020,13 @@ class OpenAILLMAdvisor:
             return None
 
         plan = self._pre_search_llm_query_plan(user_text)
-        plan_queries: List[str] = []
+        plan_queries: list[str] = []
         plan_needs_search = False
-        plan_targets: List[str] = []
+        plan_targets: list[str] = []
         # -----------------------------------------------------------------
         # 3️⃣ PLANNER ACTIVATION (insert after extracting user_text)
         # -----------------------------------------------------------------
-  
+
         if isinstance(plan, dict):
             plan_needs_search = bool(plan.get("needs_search"))
             for q in plan.get("queries") or []:
@@ -1854,17 +2040,19 @@ class OpenAILLMAdvisor:
 
         force_package_lookup = _research_detect_missing_package_version(user_text)
 
-        code_plan: Optional[Dict[str, Any]] = None
+        code_plan: dict[str, Any] | None = None
         if (not plan_needs_search) or (not plan_queries) or force_package_lookup:
             code_plan = self._pre_search_code_context(user_text)
             if isinstance(code_plan, dict):
                 code_needs_search = bool(code_plan.get("needs_search"))
                 code_queries = [
-                    q for q in (code_plan.get("queries") or [])
+                    q
+                    for q in (code_plan.get("queries") or [])
                     if isinstance(q, str) and q.strip()
                 ]
                 code_targets = [
-                    t for t in (code_plan.get("targets") or [])
+                    t
+                    for t in (code_plan.get("targets") or [])
                     if isinstance(t, str) and t.strip()
                 ]
                 if code_needs_search and code_queries:
@@ -1881,7 +2069,9 @@ class OpenAILLMAdvisor:
         github_query = False
         if plan_needs_search:
             redteam_query = _research_is_redteam_query(user_text, plan_targets)
-            github_query = _research_needs_github_search(user_text, plan_targets) or redteam_query
+            github_query = (
+                _research_needs_github_search(user_text, plan_targets) or redteam_query
+            )
 
         self._log_research_event(
             "STAGE_1_QUERY_DECOMPOSITION",
@@ -1892,8 +2082,12 @@ class OpenAILLMAdvisor:
                 "planner_queries": len(plan_queries),
                 "planner_targets": plan_targets[:8],
                 "code_context_used": bool(code_plan),
-                "code_context_needs_search": bool(code_plan.get("needs_search")) if code_plan else False,
-                "code_context_version_missing": bool(code_plan.get("version_missing")) if code_plan else False,
+                "code_context_needs_search": (
+                    bool(code_plan.get("needs_search")) if code_plan else False
+                ),
+                "code_context_version_missing": (
+                    bool(code_plan.get("version_missing")) if code_plan else False
+                ),
                 "redteam_query": redteam_query,
                 "github_query": github_query,
             },
@@ -1918,9 +2112,9 @@ class OpenAILLMAdvisor:
             )
             return None
 
-        external_access = bool(self._web_search_enabled() or force_package_lookup) and bool(
-            getattr(self.config, "web_search_external_access", True)
-        )
+        external_access = bool(
+            self._web_search_enabled() or force_package_lookup
+        ) and bool(getattr(self.config, "web_search_external_access", True))
         latest_bias = _research_is_latest_query(user_text)
 
         layers = {
@@ -1949,7 +2143,9 @@ class OpenAILLMAdvisor:
         )
 
         results = self._research_collect_results(layers, external_access)
-        missing_count = sum(1 for r in results if r.get("url", "").startswith("MISSING_RESULT_"))
+        missing_count = sum(
+            1 for r in results if r.get("url", "").startswith("MISSING_RESULT_")
+        )
         self._log_research_event(
             "STAGE_3_WEB_SEARCH_TOP_30",
             {
@@ -1971,7 +2167,7 @@ class OpenAILLMAdvisor:
                 "skipped": sum(1 for e in extracts if e.get("skipped")),
             },
         )
-        extracts_meta: List[Dict[str, Any]] = []
+        extracts_meta: list[dict[str, Any]] = []
         for ex in extracts:
             extracts_meta.append(
                 {
@@ -2037,19 +2233,23 @@ class OpenAILLMAdvisor:
         )
         return context
 
-    def _research_collect_results(self, layers: Dict[str, List[str]], external_access: bool) -> List[Dict[str, str]]:
-        results: List[Dict[str, str]] = []
+    def _research_collect_results(
+        self, layers: dict[str, list[str]], external_access: bool
+    ) -> list[dict[str, str]]:
+        results: list[dict[str, str]] = []
         seen = set()
 
         if not external_access:
             for i in range(30):
                 n = i + 1
-                results.append({
-                    "title": f"MISSING_RESULT_{n}",
-                    "url": f"MISSING_RESULT_{n}",
-                    "snippet": "",
-                    "source": "placeholder",
-                })
+                results.append(
+                    {
+                        "title": f"MISSING_RESULT_{n}",
+                        "url": f"MISSING_RESULT_{n}",
+                        "snippet": "",
+                        "source": "placeholder",
+                    }
+                )
             return results
 
         rounds = [
@@ -2091,12 +2291,14 @@ class OpenAILLMAdvisor:
                     if key in seen:
                         continue
                     seen.add(key)
-                    results.append({
-                        "title": str(getattr(item, "title", "") or ""),
-                        "url": url,
-                        "snippet": str(getattr(item, "snippet", "") or ""),
-                        "source": "ddgr",
-                    })
+                    results.append(
+                        {
+                            "title": str(getattr(item, "title", "") or ""),
+                            "url": url,
+                            "snippet": str(getattr(item, "snippet", "") or ""),
+                            "source": "ddgr",
+                        }
+                    )
                     if len(results) >= 30:
                         break
                 if len(results) >= 30:
@@ -2106,72 +2308,87 @@ class OpenAILLMAdvisor:
 
         while len(results) < 30:
             n = len(results) + 1
-            results.append({
-                "title": f"MISSING_RESULT_{n}",
-                "url": f"MISSING_RESULT_{n}",
-                "snippet": "",
-                "source": "placeholder",
-            })
+            results.append(
+                {
+                    "title": f"MISSING_RESULT_{n}",
+                    "url": f"MISSING_RESULT_{n}",
+                    "snippet": "",
+                    "source": "placeholder",
+                }
+            )
 
         return results[:30]
+
     @log_method
-    def _research_fetch_and_extract(self, results: List[Dict[str, str]], external_access: bool) -> List[Dict[str, Any]]:
-        extracts: List[Dict[str, Any]] = []
+    def _research_fetch_and_extract(
+        self, results: list[dict[str, str]], external_access: bool
+    ) -> list[dict[str, Any]]:
+        extracts: list[dict[str, Any]] = []
         for r in results:
             url = r.get("url", "")
             title = r.get("title", "")
             if not external_access or not url or url.startswith("MISSING_RESULT_"):
-                extracts.append({
-                    "url": url,
-                    "title": title,
-                    "text": "",
-                    "date": None,
-                    "content_type": "",
-                    "skipped": True,
-                    "error": "no_external_access_or_missing",
-                })
-                continue
-
-            fetch = self._research_fetch_url(url)
-            if fetch.get("error"):
-                extracts.append({
-                    "url": url,
-                    "title": title,
-                    "text": "",
-                    "date": None,
-                    "content_type": fetch.get("content_type", ""),
-                    "skipped": True,
-                    "error": fetch.get("error"),
-                })
-                continue
-
-            content_type = fetch.get("content_type", "") or ""
-            raw = fetch.get("content") or b""
-            is_pdf = "application/pdf" in content_type.lower() or url.lower().endswith(".pdf")
-
-            if is_pdf:
-                text = _research_pdf_to_text_if_available(raw)
-                if text is None:
-                    extracts.append({
+                extracts.append(
+                    {
                         "url": url,
                         "title": title,
                         "text": "",
                         "date": None,
-                        "content_type": content_type,
+                        "content_type": "",
                         "skipped": True,
-                        "error": "pdf_to_text_not_available",
-                    })
+                        "error": "no_external_access_or_missing",
+                    }
+                )
+                continue
+
+            fetch = self._research_fetch_url(url)
+            if fetch.get("error"):
+                extracts.append(
+                    {
+                        "url": url,
+                        "title": title,
+                        "text": "",
+                        "date": None,
+                        "content_type": fetch.get("content_type", ""),
+                        "skipped": True,
+                        "error": fetch.get("error"),
+                    }
+                )
+                continue
+
+            content_type = fetch.get("content_type", "") or ""
+            raw = fetch.get("content") or b""
+            is_pdf = "application/pdf" in content_type.lower() or url.lower().endswith(
+                ".pdf"
+            )
+
+            if is_pdf:
+                text = _research_pdf_to_text_if_available(raw)
+                if text is None:
+                    extracts.append(
+                        {
+                            "url": url,
+                            "title": title,
+                            "text": "",
+                            "date": None,
+                            "content_type": content_type,
+                            "skipped": True,
+                            "error": "pdf_to_text_not_available",
+                        }
+                    )
                     continue
                 date = _research_extract_date(text)
-                extracts.append({
-                    "url": url,
-                    "title": title,
-                    "text": text[:20000],
-                    "date": date,
-                    "content_type": content_type,
-                    "skipped": False,
-                    "error": None,
-                })
+                extracts.append(
+                    {
+                        "url": url,
+                        "title": title,
+                        "text": text[:20000],
+                        "date": date,
+                        "content_type": content_type,
+                        "skipped": False,
+                        "error": None,
+                    }
+                )
                 continue
 
             html_text = raw.decode(errors="ignore")
@@ -2179,19 +2396,22 @@ class OpenAILLMAdvisor:
             text = _research_strip_html(html_text)
             date = _research_extract_date(html_text) or _research_extract_date(text)
 
-            extracts.append({
-                "url": url,
-                "title": page_title,
-                "text": text[:20000],
-                "date": date,
-                "content_type": content_type,
-                "skipped": False,
-                "error": None,
-            })
+            extracts.append(
+                {
+                    "url": url,
+                    "title": page_title,
+                    "text": text[:20000],
+                    "date": date,
+                    "content_type": content_type,
+                    "skipped": False,
+                    "error": None,
+                }
+            )
 
         return extracts
+
     @log_method
-    def _research_fetch_url(self, url: str) -> Dict[str, Any]:
+    def _research_fetch_url(self, url: str) -> dict[str, Any]:
         rate_limit = float(os.getenv("LLM_RESEARCH_RATE_LIMIT", "1.0"))
         max_retries = int(os.getenv("LLM_RESEARCH_FETCH_RETRIES", "2"))
         timeout = int(os.getenv("LLM_RESEARCH_FETCH_TIMEOUT", "15"))
@@ -2223,7 +2443,7 @@ class OpenAILLMAdvisor:
                     "FETCH_RETRY",
                     {"url": url, "attempt": attempt, "error": err},
                 )
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
                 last_ts = getattr(self, "_research_last_fetch_ts", 0.0)
 
         return {
@@ -2234,9 +2454,12 @@ class OpenAILLMAdvisor:
             "content": b"",
             "error": err or "fetch_failed",
         }
+
     @log_method
-    def _research_rank_evidence(self, extracts: List[Dict[str, Any]], latest_bias: bool) -> List[Dict[str, Any]]:
-        evidence: List[Dict[str, Any]] = []
+    def _research_rank_evidence(
+        self, extracts: list[dict[str, Any]], latest_bias: bool
+    ) -> list[dict[str, Any]]:
+        evidence: list[dict[str, Any]] = []
         for ex in extracts:
             if ex.get("skipped"):
                 continue
@@ -2251,15 +2474,17 @@ class OpenAILLMAdvisor:
                 score = (rec * 0.7) + (rel * 0.3)
             else:
                 score = (rel * 0.6) + (rec * 0.4)
-            evidence.append({
-                "url": url,
-                "title": title,
-                "date": date,
-                "key_claims": claims,
-                "reliability_score": round(rel, 4),
-                "domain": _research_extract_domain(url),
-                "score": score,
-            })
+            evidence.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "date": date,
+                    "key_claims": claims,
+                    "reliability_score": round(rel, 4),
+                    "domain": _research_extract_domain(url),
+                    "score": score,
+                }
+            )
 
         evidence = sorted(
             evidence,
@@ -2273,9 +2498,10 @@ class OpenAILLMAdvisor:
             ev["id"] = idx
             ranked.append(ev)
         return ranked
+
     @log_method
-    def _research_crosscheck(self, evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
-        groups: List[Dict[str, Any]] = []
+    def _research_crosscheck(self, evidence: list[dict[str, Any]]) -> dict[str, Any]:
+        groups: list[dict[str, Any]] = []
         for ev in evidence:
             domain = ev.get("domain", "")
             for claim in ev.get("key_claims", []) or []:
@@ -2292,12 +2518,14 @@ class OpenAILLMAdvisor:
                         matched = True
                         break
                 if not matched:
-                    groups.append({
-                        "claim": claim,
-                        "tokens": tokens,
-                        "domains": {domain},
-                        "source_ids": {ev.get("id")},
-                    })
+                    groups.append(
+                        {
+                            "claim": claim,
+                            "tokens": tokens,
+                            "domains": {domain},
+                            "source_ids": {ev.get("id")},
+                        }
+                    )
 
         verified = []
         unverified = []
@@ -2313,19 +2541,20 @@ class OpenAILLMAdvisor:
                 unverified.append(item)
 
         return {"verified": verified, "unverified": unverified}
+
     @log_method
     def _research_format_context(
         self,
         *,
         user_text: str,
-        layers: Dict[str, List[str]],
-        results: List[Dict[str, str]],
-        extracts: List[Dict[str, Any]],
-        evidence: List[Dict[str, Any]],
-        crosscheck: Dict[str, Any],
+        layers: dict[str, list[str]],
+        results: list[dict[str, str]],
+        extracts: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        crosscheck: dict[str, Any],
         latest_bias: bool,
         external_access: bool,
-        dates_found: List[str],
+        dates_found: list[str],
     ) -> str:
         lines = []
         lines.append("Pre-response research context (auto-generated).")
@@ -2333,9 +2562,12 @@ class OpenAILLMAdvisor:
         lines.append(f"External access: {'enabled' if external_access else 'disabled'}")
         lines.append(f"Latest bias: {'on' if latest_bias else 'off'}")
         if _research_detect_missing_package_version(user_text):
-            lines.append("Package version missing signal: detected (targeted registry queries enabled)")
+            lines.append(
+                "Package version missing signal: detected (targeted registry queries enabled)"
+            )
         real_results = [
-            r for r in results
+            r
+            for r in results
             if r.get("url") and not str(r.get("url", "")).startswith("MISSING_RESULT_")
         ]
         if external_access and real_results:
@@ -2379,20 +2611,21 @@ class OpenAILLMAdvisor:
         verified = crosscheck.get("verified", [])
         if verified:
             for v in verified:
-                lines.append(
-                    f"- {v.get('claim')} (sources: {v.get('source_ids')})"
-                )
+                lines.append(f"- {v.get('claim')} (sources: {v.get('source_ids')})")
         else:
             lines.append("- No claims verified across 3 independent sources.")
         lines.append("")
-        lines.append("Instruction: Use inline citations like [n] referencing the evidence table above.")
+        lines.append(
+            "Instruction: Use inline citations like [n] referencing the evidence table above."
+        )
 
         return "\n".join(lines)
+
     # --------------------------------------------------------------
     # 1️⃣  New helper method – detects “/planner” and runs the planner
     # --------------------------------------------------------------
     @log_method
-    def _handle_planner_command(self, messages: List[Dict[str, str]]) -> Optional[str]:
+    def _handle_planner_command(self, messages: list[dict[str, str]]) -> str | None:
         """
         Scan the message list for a user message that starts with the
         literal command “/planner”. If found, invoke the global
@@ -2408,7 +2641,7 @@ class OpenAILLMAdvisor:
                 content = msg["content"].strip()
                 if content.lower().startswith("/planner"):
                     # Strip the command keyword and any leading whitespace
-                    user_request = content[len("/planner"):].strip()
+                    user_request = content[len("/planner") :].strip()
                     if not user_request:
                         # Empty request – return a minimal placeholder
                         return json.dumps(
@@ -2432,11 +2665,12 @@ class OpenAILLMAdvisor:
                         plan_dict = plan_obj
                     return json.dumps(plan_dict, ensure_ascii=False, indent=2)
         return None
+
     # ------------------------------------------------------------------
     # Local tool support – schema + dispatch + agentic loop
     # ------------------------------------------------------------------
 
-    def _build_local_tools_config(self, *, api: str = "chat") -> List[Dict[str, Any]]:
+    def _build_local_tools_config(self, *, api: str = "chat") -> list[dict[str, Any]]:
         """
         Build the ``tools`` list for the OpenAI API call.
 
@@ -2448,23 +2682,25 @@ class OpenAILLMAdvisor:
         *and* the user has it enabled, we include it alongside the
         local function-calling tools so the model can choose freely.
         """
-        tools: List[Dict[str, Any]] = []
+        tools: list[dict[str, Any]] = []
 
         # Always include our local tools (in the right format)
         tools.extend(get_all_tool_schemas(api=api))
 
         # Optionally include the OpenAI-hosted web_search tool too
         if self._web_search_enabled() and self._backend_supports_web_search_tool():
-            tools.append({
-                "type": "web_search",
-                "external_web_access": bool(
-                    getattr(self.config, "web_search_external_access", True)
-                ),
-            })
+            tools.append(
+                {
+                    "type": "web_search",
+                    "external_web_access": bool(
+                        getattr(self.config, "web_search_external_access", True)
+                    ),
+                }
+            )
 
         return tools
 
-    def _execute_tool_calls_from_response(self, resp: Any) -> List[Dict[str, Any]]:
+    def _execute_tool_calls_from_response(self, resp: Any) -> list[dict[str, Any]]:
         """
         Given a Responses-API response object, extract any function_call
         outputs, execute them locally, and return a list of tool-result
@@ -2473,7 +2709,7 @@ class OpenAILLMAdvisor:
         Every tool call is fully logged (args, result, timing) to both
         the research event logger and the daily JSONL logger.
         """
-        tool_results: List[Dict[str, Any]] = []
+        tool_results: list[dict[str, Any]] = []
         for item in getattr(resp, "output", []) or []:
             item_type = self._get(item, "type")
             if item_type != "function_call":
@@ -2500,19 +2736,28 @@ class OpenAILLMAdvisor:
 
             # Log full result (not just keys) to daily JSONL
             result_str = json.dumps(result, ensure_ascii=False, default=str)
-            safe_result = result_str[:500_000] + ("...[TRUNCATED]" if len(result_str) > 500_000 else "")
+            safe_result = result_str[:500_000] + (
+                "...[TRUNCATED]" if len(result_str) > 500_000 else ""
+            )
             try:
-                self.llm_logger.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    "event": "tool_call_complete",
-                    "api": "responses",
-                    "tool": fn_name,
-                    "call_id": call_id,
-                    "args": args,
-                    "elapsed_ms": _tc_elapsed,
-                    "result_length": len(result_str),
-                    "result": safe_result,
-                }, ensure_ascii=False))
+                self.llm_logger.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(
+                                timespec="milliseconds"
+                            ),
+                            "event": "tool_call_complete",
+                            "api": "responses",
+                            "tool": fn_name,
+                            "call_id": call_id,
+                            "args": args,
+                            "elapsed_ms": _tc_elapsed,
+                            "result_length": len(result_str),
+                            "result": safe_result,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             except Exception:
                 pass
 
@@ -2522,19 +2767,23 @@ class OpenAILLMAdvisor:
                     "tool": fn_name,
                     "call_id": call_id,
                     "elapsed_ms": _tc_elapsed,
-                    "result_keys": list(result.keys()) if isinstance(result, dict) else [],
+                    "result_keys": (
+                        list(result.keys()) if isinstance(result, dict) else []
+                    ),
                 },
             )
 
-            tool_results.append({
-                "type": "function_call_output",
-                "call_id": call_id,
-                "output": result_str,
-            })
+            tool_results.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": result_str,
+                }
+            )
 
         return tool_results
 
-    def _execute_tool_calls_from_chat(self, message: Any) -> List[Dict[str, Any]]:
+    def _execute_tool_calls_from_chat(self, message: Any) -> list[dict[str, Any]]:
         """
         Given a Chat Completions message with tool_calls, execute them
         locally and return the assistant + tool messages to append.
@@ -2542,7 +2791,7 @@ class OpenAILLMAdvisor:
         Every tool call is fully logged (args, result, timing) to both
         the research event logger and the daily JSONL logger.
         """
-        follow_up: List[Dict[str, Any]] = []
+        follow_up: list[dict[str, Any]] = []
         tool_calls = getattr(message, "tool_calls", None) or []
         if not tool_calls:
             return follow_up
@@ -2550,18 +2799,22 @@ class OpenAILLMAdvisor:
         # First, echo the assistant message with the tool_calls back
         tc_dicts = []
         for tc in tool_calls:
-            tc_dicts.append({
-                "id": tc.id,
-                "type": "function",
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
-                },
-            })
-        follow_up.append({
-            "role": "assistant",
-            "tool_calls": tc_dicts,
-        })
+            tc_dicts.append(
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+            )
+        follow_up.append(
+            {
+                "role": "assistant",
+                "tool_calls": tc_dicts,
+            }
+        )
 
         # Then, execute each and add the results
         for tc in tool_calls:
@@ -2584,19 +2837,28 @@ class OpenAILLMAdvisor:
 
             # Log full result (not just keys) to daily JSONL
             result_str = json.dumps(result, ensure_ascii=False, default=str)
-            safe_result = result_str[:500_000] + ("...[TRUNCATED]" if len(result_str) > 500_000 else "")
+            safe_result = result_str[:500_000] + (
+                "...[TRUNCATED]" if len(result_str) > 500_000 else ""
+            )
             try:
-                self.llm_logger.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    "event": "tool_call_complete",
-                    "api": "chat.completions",
-                    "tool": fn_name,
-                    "call_id": tc.id,
-                    "args": args,
-                    "elapsed_ms": _tc_elapsed,
-                    "result_length": len(result_str),
-                    "result": safe_result,
-                }, ensure_ascii=False))
+                self.llm_logger.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(
+                                timespec="milliseconds"
+                            ),
+                            "event": "tool_call_complete",
+                            "api": "chat.completions",
+                            "tool": fn_name,
+                            "call_id": tc.id,
+                            "args": args,
+                            "elapsed_ms": _tc_elapsed,
+                            "result_length": len(result_str),
+                            "result": safe_result,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             except Exception:
                 pass
 
@@ -2606,15 +2868,19 @@ class OpenAILLMAdvisor:
                     "tool": fn_name,
                     "call_id": tc.id,
                     "elapsed_ms": _tc_elapsed,
-                    "result_keys": list(result.keys()) if isinstance(result, dict) else [],
+                    "result_keys": (
+                        list(result.keys()) if isinstance(result, dict) else []
+                    ),
                 },
             )
 
-            follow_up.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": result_str,
-            })
+            follow_up.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result_str,
+                }
+            )
 
         return follow_up
 
@@ -2644,11 +2910,11 @@ class OpenAILLMAdvisor:
     def _build_secure_chat_messages(
         self,
         *,
-        messages: List[Dict[str, str]],
-        api_system_prompt: Optional[str],
-        api_user_message: Optional[str],
-        dark_recon_ctx: Optional[str],
-    ) -> List[Dict[str, str]]:
+        messages: list[dict[str, str]],
+        api_system_prompt: str | None,
+        api_user_message: str | None,
+        dark_recon_ctx: str | None,
+    ) -> list[dict[str, str]]:
         """Single source of truth for secure-chat message assembly.
 
         Always composes the **full security stack** via the multi-layer prompt
@@ -2677,18 +2943,18 @@ class OpenAILLMAdvisor:
     @log_method
     def secure_chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         resource_name: str = "resource",
         *,
-        api_system_prompt: Optional[str] = None,
-        api_user_message: Optional[str] = None,
+        api_system_prompt: str | None = None,
+        api_user_message: str | None = None,
     ) -> str:
         """
         secure_chat now supports two pass-through messages:
         - api_system_prompt: injected as a system message (highest risk if untrusted!)
         - api_user_message: injected as a user message (safer)
         """
-        _chat_t0 = time.monotonic()   # wall-clock start for the entire chat
+        _chat_t0 = time.monotonic()  # wall-clock start for the entire chat
 
         if not self.config.enabled or self.client is None:
             audit_log("llm_chat_disabled", {"reason": "no_client"})
@@ -2704,7 +2970,7 @@ class OpenAILLMAdvisor:
         try:
             # Serialize full messages (cap each message at 50 KB for safety)
             safe_messages = []
-            for m in (messages or []):
+            for m in messages or []:
                 sm = dict(m)
                 c = sm.get("content", "")
                 if isinstance(c, str) and len(c) > 50_000:
@@ -2714,7 +2980,9 @@ class OpenAILLMAdvisor:
             self.llm_logger.info(
                 json.dumps(
                     {
-                        "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                        "ts": datetime.datetime.now().isoformat(
+                            timespec="milliseconds"
+                        ),
                         "event": "llm_request",
                         "layer": "secure_chat",
                         "resource": resource_name,
@@ -2724,9 +2992,17 @@ class OpenAILLMAdvisor:
                         "messages_count": len(messages or []),
                         "messages": safe_messages,
                         "has_api_system_prompt": bool(api_system_prompt),
-                        "api_system_prompt": (api_system_prompt or "")[:10_000] if api_system_prompt else None,
+                        "api_system_prompt": (
+                            (api_system_prompt or "")[:10_000]
+                            if api_system_prompt
+                            else None
+                        ),
                         "has_api_user_message": bool(api_user_message),
-                        "api_user_message": (api_user_message or "")[:10_000] if api_user_message else None,
+                        "api_user_message": (
+                            (api_user_message or "")[:10_000]
+                            if api_user_message
+                            else None
+                        ),
                         "temperature": self.config.temperature,
                         "top_p": self.config.top_p,
                         "max_tokens": self.config.max_tokens,
@@ -2737,12 +3013,13 @@ class OpenAILLMAdvisor:
         except Exception:
             pass
 
-
         # -----------------------------------------------------------------
         # 3️⃣  Sanitize any injected API messages (unchanged)
         # -----------------------------------------------------------------
         api_system_prompt = self._clean_inbound_text(api_system_prompt or "")
-        api_user_message = self._clean_inbound_text((api_system_prompt or "") + (api_user_message or ""))
+        api_user_message = self._clean_inbound_text(
+            (api_system_prompt or "") + (api_user_message or "")
+        )
 
         # dark_recon context (optional layer input; always eligible on secure_chat)
         dark_recon_ctx = load_latest_dark_recon_summary(BASE_DIR / "data")
@@ -2781,8 +3058,8 @@ class OpenAILLMAdvisor:
         )
 
         if self._should_use_responses_api(model_name):
-            instructions_parts: List[str] = []
-            input_msgs: List[Dict[str, Any]] = []
+            instructions_parts: list[str] = []
+            input_msgs: list[dict[str, Any]] = []
 
             for m in all_msgs:
                 role = m.get("role")
@@ -2798,7 +3075,7 @@ class OpenAILLMAdvisor:
             # ── Build tools list (local + optional hosted) ──
             # local_tools = self._build_local_tools_config(api="responses")
 
-            create_kwargs: Dict[str, Any] = {
+            create_kwargs: dict[str, Any] = {
                 "model": model_name,
                 "instructions": instructions,
                 "input": input_msgs,
@@ -2924,7 +3201,7 @@ class OpenAILLMAdvisor:
         #     t for t in get_all_tool_schemas() if t.get("type") == "function"
         # ]
 
-        chat_create_kwargs: Dict[str, Any] = {
+        chat_create_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": all_msgs,
             "temperature": self.config.temperature,
@@ -2978,19 +3255,24 @@ class OpenAILLMAdvisor:
 
             self._log_research_event(
                 "TOOL_LOOP_ROUND_CHAT",
-                {"round": _round + 1, "tool_calls": len([
-                    f for f in follow_up if f.get("role") == "tool"
-                ])},
+                {
+                    "round": _round + 1,
+                    "tool_calls": len(
+                        [f for f in follow_up if f.get("role") == "tool"]
+                    ),
+                },
             )
 
             # Extend the conversation with assistant + tool messages
             all_msgs.extend(follow_up)
 
             _round_t0 = time.monotonic()
-            response = self.client.chat.completions.create(**{
-                **chat_create_kwargs,
-                "messages": all_msgs,
-            })
+            response = self.client.chat.completions.create(
+                **{
+                    **chat_create_kwargs,
+                    "messages": all_msgs,
+                }
+            )
             _round_elapsed = round((time.monotonic() - _round_t0) * 1000, 2)
             msg = response.choices[0].message
 
@@ -3029,29 +3311,32 @@ class OpenAILLMAdvisor:
 
         normalized = self._normalize_code_blocks(content or "")
         return normalized.strip()
+
     @log_method
     def create_thread(
         self,
         *,
-        messages: Optional[List[Dict[str, str]]] = None,
-        metadata: Optional[Dict[str, str]] = None,
+        messages: list[dict[str, str]] | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> Any:
         if not self.config.enabled or self.client is None:
             raise RuntimeError("LLM client not initialized; cannot create thread.")
 
-        payload_messages: List[Dict[str, Any]] = []
-        allowed_roles = {"user", "assistant","system"}
+        payload_messages: list[dict[str, Any]] = []
+        allowed_roles = {"user", "assistant", "system"}
 
         for msg in messages or []:
             role = str(msg.get("role", "")).strip().lower()
             if role not in allowed_roles:
-                raise ValueError(f"Unsupported message role '{role}' for Assistants threads.")
+                raise ValueError(
+                    f"Unsupported message role '{role}' for Assistants threads."
+                )
             content = str(msg.get("content", "")).strip()
             if not content:
                 continue
             payload_messages.append({"role": role, "content": content})
 
-        create_kwargs: Dict[str, Any] = {}
+        create_kwargs: dict[str, Any] = {}
         if payload_messages:
             create_kwargs["messages"] = payload_messages
         if metadata:
@@ -3069,6 +3354,7 @@ class OpenAILLMAdvisor:
         )
 
         return thread
+
     @log_method
     def _should_use_responses_api(self, model_name: str) -> bool:
         # Prefer Responses if you want reasoning summaries or tool support.
@@ -3078,27 +3364,26 @@ class OpenAILLMAdvisor:
             return True
         return model_name.startswith("gpt-5")
 
-    def _get(self,obj, key, default=None):
+    def _get(self, obj, key, default=None):
         if isinstance(obj, dict):
             return obj.get(key, default)
         return getattr(obj, key, default)
-    
+
     def _extract_responses_text(self, resp: Any) -> str:
-            text = getattr(resp, "output_text", None)
-            if text:
-                return str(text)
+        text = getattr(resp, "output_text", None)
+        if text:
+            return str(text)
 
-
-            chunks: List[str] = []
-            for item in self._get(resp, "output", []) or []:
-                if self._get(item, "type") != "message":
-                    continue
-                for c in self._get(item, "content", []) or []:
-                    if self._get(c, "type") in ("output_text", "text"):
-                        t = self._get(c, "text")
-                        if t:
-                            chunks.append(str(t))
-            return "".join(chunks)
+        chunks: list[str] = []
+        for item in self._get(resp, "output", []) or []:
+            if self._get(item, "type") != "message":
+                continue
+            for c in self._get(item, "content", []) or []:
+                if self._get(c, "type") in ("output_text", "text"):
+                    t = self._get(c, "text")
+                    if t:
+                        chunks.append(str(t))
+        return "".join(chunks)
 
     @log_method
     def stream_print_unified(self, stream: Iterator[Any]) -> None:
@@ -3111,8 +3396,8 @@ class OpenAILLMAdvisor:
         Accumulates all content and reasoning for a final log entry.
         """
         # Accumulators for post-stream logging
-        _text_parts: List[str] = []
-        _reasoning_parts: List[str] = []
+        _text_parts: list[str] = []
+        _reasoning_parts: list[str] = []
         _stream_api = "unknown"
 
         for ev in stream:
@@ -3176,43 +3461,60 @@ class OpenAILLMAdvisor:
             ts = datetime.datetime.now().isoformat(timespec="seconds")
 
             safe_text = self._clean_inbound_text(full_text, max_len=10_000) or ""
-            self.llm_logger.info(json.dumps({
-                "ts": ts,
-                "event": "llm_response",
-                "layer": "stream",
-                "api": _stream_api,
-                "model": model_name,
-                "backend": base_url or "default",
-                "text": safe_text,
-                "streamed_chars": len(full_text),
-            }, ensure_ascii=False))
+            self.llm_logger.info(
+                json.dumps(
+                    {
+                        "ts": ts,
+                        "event": "llm_response",
+                        "layer": "stream",
+                        "api": _stream_api,
+                        "model": model_name,
+                        "backend": base_url or "default",
+                        "text": safe_text,
+                        "streamed_chars": len(full_text),
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
-            safe_reasoning = self._clean_inbound_text(full_reasoning, max_len=10_000_000) or ""
-            self.llm_logger.info(json.dumps({
-                "ts": ts,
-                "event": "llm_reasoning",
-                "layer": "stream",
-                "api": _stream_api,
-                "model": model_name,
-                "backend": base_url or "default",
-                "missing": not bool(safe_reasoning),
-                "reasoning": safe_reasoning,
-            }, ensure_ascii=False))
+            safe_reasoning = (
+                self._clean_inbound_text(full_reasoning, max_len=10_000_000) or ""
+            )
+            self.llm_logger.info(
+                json.dumps(
+                    {
+                        "ts": ts,
+                        "event": "llm_reasoning",
+                        "layer": "stream",
+                        "api": _stream_api,
+                        "model": model_name,
+                        "backend": base_url or "default",
+                        "missing": not bool(safe_reasoning),
+                        "reasoning": safe_reasoning,
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
             # Thinking section (embedded in streamed text)
             thinking = ""
             if hasattr(self, "_extract_section"):
                 thinking = self._extract_section(full_text or "", "Thinking")
-            self.llm_logger.info(json.dumps({
-                "ts": ts,
-                "event": "llm_thinking",
-                "layer": "stream",
-                "api": _stream_api,
-                "model": model_name,
-                "backend": base_url or "default",
-                "missing": not bool(thinking),
-                "thinking": thinking if thinking else None,
-            }, ensure_ascii=False))
+            self.llm_logger.info(
+                json.dumps(
+                    {
+                        "ts": ts,
+                        "event": "llm_thinking",
+                        "layer": "stream",
+                        "api": _stream_api,
+                        "model": model_name,
+                        "backend": base_url or "default",
+                        "missing": not bool(thinking),
+                        "thinking": thinking if thinking else None,
+                    },
+                    ensure_ascii=False,
+                )
+            )
         except Exception:
             pass
 

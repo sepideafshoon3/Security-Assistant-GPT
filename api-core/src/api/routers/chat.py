@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -35,10 +35,19 @@ def _maybe_generate_title(
     if not conversation.title_is_generated:
         return
     try:
-        title = advisor.secure_chat(messages=[
-            {"role": "system", "content": "یک عنوان بسیار کوتاه (حداکثر ۵ کلمه) برای این گفتگو بده. فقط عنوان را برگردان."},
-            {"role": "user", "content": first_user_message},
-        ]).strip().strip('"')
+        title = (
+            advisor.secure_chat(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "یک عنوان بسیار کوتاه (حداکثر ۵ کلمه) برای این گفتگو بده. فقط عنوان را برگردان.",
+                    },
+                    {"role": "user", "content": first_user_message},
+                ]
+            )
+            .strip()
+            .strip('"')
+        )
         if title:
             conversation.title = title[:255]
             conversation.title_is_generated = False  # دیگه خودکار عوضش نکن
@@ -51,22 +60,29 @@ def _maybe_generate_title(
 # /chat: core chat endpoint
 # ============================================================
 
+
 @router.post("/chat")
 async def chat(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    data: Dict[str, Any] = await request.json()
-    conversation_id: Optional[str] = data.get("conversation_id")
-    raw_messages: List[Dict[str, Any]] = data.get("messages", [])
+) -> dict[str, Any]:
+    data: dict[str, Any] = await request.json()
+    conversation_id: str | None = data.get("conversation_id")
+    raw_messages: list[dict[str, Any]] = data.get("messages", [])
     # Optional per-request model → router picks openai vs xai client + prompts.
     advisor = resolve_llm_advisor(data.get("model") if isinstance(data, dict) else None)
 
-    if advisor is None or advisor.client is None or not getattr(advisor.config, "enabled", False):
-        raise HTTPException(status_code=503, detail="LLM chat is disabled or unavailable.")
+    if (
+        advisor is None
+        or advisor.client is None
+        or not getattr(advisor.config, "enabled", False)
+    ):
+        raise HTTPException(
+            status_code=503, detail="LLM chat is disabled or unavailable."
+        )
 
-    new_messages: List[Dict[str, str]] = []
+    new_messages: list[dict[str, str]] = []
     for m in raw_messages:
         if not isinstance(m, dict):
             continue
@@ -78,7 +94,7 @@ async def chat(
     if not new_messages:
         raise HTTPException(status_code=400, detail="No valid messages provided.")
 
-    last_user_msg: Optional[Dict[str, str]] = None
+    last_user_msg: dict[str, str] | None = None
     for m in reversed(new_messages):
         if m["role"] == "user":
             last_user_msg = m
@@ -88,11 +104,14 @@ async def chat(
 
     # Resolve or create the conversation — always scoped to current_user so
     # nobody can read/append to someone else's chat by guessing an id.
-    conversation: Optional[Conversation] = None
+    conversation: Conversation | None = None
     if conversation_id:
         conversation = (
             db.query(Conversation)
-            .filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id)
+            .filter(
+                Conversation.id == conversation_id,
+                Conversation.user_id == current_user.id,
+            )
             .first()
         )
         if conversation is None:
@@ -105,20 +124,30 @@ async def chat(
         db.refresh(conversation)
 
     history = [{"role": m.role, "content": m.content} for m in conversation.messages]
-    llm_messages: List[Dict[str, str]] = history + [last_user_msg]
+    llm_messages: list[dict[str, str]] = history + [last_user_msg]
 
     try:
         reply_text: str = advisor.secure_chat(messages=llm_messages)
     except Exception as e:
-        logger.exception("[chat] secure_chat failed | id=%s error=%r", conversation.id, e)
+        logger.exception(
+            "[chat] secure_chat failed | id=%s error=%r", conversation.id, e
+        )
         raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}")
 
     if len(history) == 0:
         _maybe_generate_title(conversation, advisor, last_user_msg["content"], db)
 
-    db.add(Message(conversation_id=conversation.id, role="user", content=last_user_msg["content"]))
-    db.add(Message(conversation_id=conversation.id, role="assistant", content=reply_text))
-    conversation.updated_at = datetime.now(timezone.utc)
+    db.add(
+        Message(
+            conversation_id=conversation.id,
+            role="user",
+            content=last_user_msg["content"],
+        )
+    )
+    db.add(
+        Message(conversation_id=conversation.id, role="assistant", content=reply_text)
+    )
+    conversation.updated_at = datetime.now(UTC)
     db.commit()
 
     audit_log(
@@ -159,13 +188,14 @@ async def chat(
 # OpenAI-compatible endpoint
 # ============================================================
 
+
 @router.post("/v1/chat/completions")
 async def openai_compatible_chat(
     request: Request,
-    body: Dict[str, Any] = Body(...),
+    body: dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_user),
-) -> Dict[str, Any]:
-    messages: List[Dict[str, Any]] = body.get("messages") or []
+) -> dict[str, Any]:
+    messages: list[dict[str, Any]] = body.get("messages") or []
     from src.llm.model_config import get_chat_model
 
     model_name: str = (
@@ -177,14 +207,20 @@ async def openai_compatible_chat(
     # Router selects openai vs xai client (and that client selects prompt set).
     advisor = resolve_llm_advisor(body.get("model"))
 
-    if advisor is None or advisor.client is None or not getattr(advisor.config, "enabled", False):
-        raise HTTPException(status_code=503, detail="LLM chat is disabled or unavailable.")
+    if (
+        advisor is None
+        or advisor.client is None
+        or not getattr(advisor.config, "enabled", False)
+    ):
+        raise HTTPException(
+            status_code=503, detail="LLM chat is disabled or unavailable."
+        )
 
-    conversation_id: Optional[str] = body.get("conversation_id") or request.headers.get(
+    conversation_id: str | None = body.get("conversation_id") or request.headers.get(
         "X-Conversation-ID"
     )
 
-    new_messages: List[Dict[str, str]] = []
+    new_messages: list[dict[str, str]] = []
     for m in messages:
         if not isinstance(m, dict):
             continue
@@ -196,7 +232,7 @@ async def openai_compatible_chat(
     if not new_messages:
         raise HTTPException(status_code=400, detail="No valid messages provided.")
 
-    last_user_msg: Optional[Dict[str, str]] = None
+    last_user_msg: dict[str, str] | None = None
     for m in reversed(new_messages):
         if m["role"] == "user":
             last_user_msg = m
@@ -206,23 +242,27 @@ async def openai_compatible_chat(
 
     if not conversation_id:
         conversation_id = str(uuid.uuid4())
-        history: List[Dict[str, str]] = []
+        history: list[dict[str, str]] = []
     else:
         try:
             history = chat_memory.load_history(conversation_id) or []
         except Exception as e:
-            logger.warning("[openai_chat] load history failed | id=%s error=%r", conversation_id, e)
+            logger.warning(
+                "[openai_chat] load history failed | id=%s error=%r", conversation_id, e
+            )
             history = []
 
     if not isinstance(history, list):
         history = []
 
-    llm_messages: List[Dict[str, str]] = history + [last_user_msg]
+    llm_messages: list[dict[str, str]] = history + [last_user_msg]
 
     try:
         reply_text: str = advisor.secure_chat(messages=llm_messages)
     except Exception as e:
-        logger.exception("[openai_chat] secure_chat failed | id=%s error=%r", conversation_id, e)
+        logger.exception(
+            "[openai_chat] secure_chat failed | id=%s error=%r", conversation_id, e
+        )
         raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}")
 
     chat_memory.append_turn(
@@ -244,7 +284,9 @@ async def openai_compatible_chat(
             )
             online_learning_dispatcher.send_openai_chat_turn(evt)
         except Exception:
-            logger.exception("[openai_chat] learning dispatch failed | id=%s", conversation_id)
+            logger.exception(
+                "[openai_chat] learning dispatch failed | id=%s", conversation_id
+            )
 
     audit_log(
         "chat_request_openai_style",

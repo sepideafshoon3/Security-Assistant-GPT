@@ -1,18 +1,16 @@
 # src/core/executor.py
 
 from pathlib import Path
-from typing import List
 
-from src.core.models import Plan, ToolResult, Report
-from src.core.policy_engine import PolicyEngine
-from src.tools.semgrep_runner import run_semgrep
-from src.tools.bandit_runner import run_bandit
-from src.tools.osv_runner import run_osv_scanner
-from src.security.audit import audit_log
+from src.core.models import Plan, Report, ToolResult
 
 # NEW
 from src.llm.openai_client import load_llm_config
 from src.llm.router import create_advisor
+from src.security.audit import audit_log
+from src.tools.bandit_runner import run_bandit
+from src.tools.osv_runner import run_osv_scanner
+from src.tools.semgrep_runner import run_semgrep
 
 
 class Executor:
@@ -25,7 +23,7 @@ class Executor:
         self.llm_advisor = create_advisor(llm_config)
 
     def execute_plan(self, plan: Plan) -> Report:
-        results: List[ToolResult] = []
+        results: list[ToolResult] = []
 
         for action in plan.actions:
             if self.policy_engine.requires_human_approval(action.action):
@@ -58,15 +56,10 @@ class Executor:
             audit_log("action_executed", result.model_dump())
 
         # === NEW: ask LLM for a defensive report ===
-        llm_summary = self.llm_advisor.generate_defensive_report(
-            plan.task_id, results
-        )
+        llm_summary = self.llm_advisor.generate_defensive_report(plan.task_id, results)
 
         summary_path = self.reports_dir / f"{plan.task_id}-summary.txt"
         summary_path.write_text(llm_summary)
 
-        summary = "Plan executed with {success}/{total} successes.".format(
-            success=sum(1 for r in results if r.success),
-            total=len(results),
-        )
+        summary = f"Plan executed with {sum(1 for r in results if r.success)}/{len(results)} successes."
         return Report(task_id=plan.task_id, results=results, summary=summary)

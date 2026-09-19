@@ -1,6 +1,6 @@
-from pydantic import BaseModel
-from typing import List,TypedDict, Dict, Optional, Literal
+from typing import Literal, TypedDict
 
+from pydantic import BaseModel
 
 
 class CreateTaskRequest(BaseModel):
@@ -23,22 +23,22 @@ class ConversationRenameRequest(BaseModel):
 
 class ChatMessage(BaseModel):
     # Keep this simple to avoid Pydantic forward-ref issues
-    role: str      # expected: "user" or "assistant" (or "system")
+    role: str  # expected: "user" or "assistant" (or "system")
     content: str
 
 
 class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
+    messages: list[ChatMessage]
 
 
 class ChatResponse(BaseModel):
     reply: str
-    
+
+
 """
 TypedDict / Typed definitions for the planning agent.
 All structures are JSON‑serialisable and match the description in the prompt.
 """
-
 
 
 # ----------------------------------------------------------------------
@@ -67,12 +67,12 @@ class Assumption(TypedDict):
 
 class PlanDraft(TypedDict):
     restated_goal: str
-    in_scope: List[str]
-    out_of_scope: List[str]
-    clarifying_questions: List[ClarifyingQuestion]
-    assumptions_if_no_answer: List[Assumption]
-    missing_facts_to_research: List[ResearchQuery]
-    initial_risks: List[str]
+    in_scope: list[str]
+    out_of_scope: list[str]
+    clarifying_questions: list[ClarifyingQuestion]
+    assumptions_if_no_answer: list[Assumption]
+    missing_facts_to_research: list[ResearchQuery]
+    initial_risks: list[str]
 
 
 # ----------------------------------------------------------------------
@@ -84,9 +84,9 @@ class EvidenceItem(TypedDict):
     snippet: str
     source: str  # domain or provider name
     url: str
-    published_date: Optional[str]  # ISO if available
-    retrieved_date: str            # ISO
-    notes: Optional[str]
+    published_date: str | None  # ISO if available
+    retrieved_date: str  # ISO
+    notes: str | None
 
 
 # ----------------------------------------------------------------------
@@ -95,49 +95,51 @@ class EvidenceItem(TypedDict):
 class DataEntity(TypedDict):
     name: str
     description: str
-    fields: List[Dict]  # {"name": "...", "type": "...", "required": bool, "notes": "..."}
+    fields: list[
+        dict
+    ]  # {"name": "...", "type": "...", "required": bool, "notes": "..."}
 
 
 class ApiEndpoint(TypedDict):
     method: str
     path: str
     purpose: str
-    auth: Optional[str]
-    request_example: Dict
-    response_example: Dict
-    errors: List[Dict]  # {"code": "...", "when": "...", "body": {...}}
+    auth: str | None
+    request_example: dict
+    response_example: dict
+    errors: list[dict]  # {"code": "...", "when": "...", "body": {...}}
 
 
 class Milestone(TypedDict):
     id: str
     name: str
-    goals: List[str]
-    tasks: List[str]
-    deliverables: List[str]
-    dependencies: List[str]
+    goals: list[str]
+    tasks: list[str]
+    deliverables: list[str]
+    dependencies: list[str]
 
 
 class AcceptanceTest(TypedDict):
     id: str
     scenario: str
-    steps: List[str]
-    expected: List[str]
+    steps: list[str]
+    expected: list[str]
 
 
 class FinalPlan(TypedDict):
     summary: str
     restated_goal: str
-    scope: Dict[str, List[str]]          # {"in_scope": [...], "out_of_scope": [...]}
-    architecture: Dict[str, any]          # components, data flow, stack, alternatives
-    data_model: List[DataEntity]
-    api: List[ApiEndpoint]
-    ui_screens: List[Dict]               # optional UI mock‑ups
-    security: Dict[str, any]
-    observability: Dict[str, any]         # logs/metrics/traces
-    performance: Dict[str, any]
-    milestones: List[Milestone]
-    risks: List[Dict]                     # {"risk":"...", "mitigation":"..."}
-    acceptance_tests: List[AcceptanceTest]
-    open_questions: List[ClarifyingQuestion]
-    assumptions: List[Assumption]
-    evidence: List[EvidenceItem]          # full list of research items used
+    scope: dict[str, list[str]]  # {"in_scope": [...], "out_of_scope": [...]}
+    architecture: dict[str, any]  # components, data flow, stack, alternatives
+    data_model: list[DataEntity]
+    api: list[ApiEndpoint]
+    ui_screens: list[dict]  # optional UI mock‑ups
+    security: dict[str, any]
+    observability: dict[str, any]  # logs/metrics/traces
+    performance: dict[str, any]
+    milestones: list[Milestone]
+    risks: list[dict]  # {"risk":"...", "mitigation":"..."}
+    acceptance_tests: list[AcceptanceTest]
+    open_questions: list[ClarifyingQuestion]
+    assumptions: list[Assumption]
+    evidence: list[EvidenceItem]  # full list of research items used

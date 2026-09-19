@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from src.core.models import ToolResult
 
 
@@ -11,7 +12,9 @@ def run_osv_scanner(repository_path: str, reports_dir: Path) -> ToolResult:
     output_path = reports_dir / "osv-scanner.json"
 
     # Fake output to keep skeleton harmless and self-contained.
-    output_path.write_text('{"status": "not-implemented", "repo": "%s"}' % repository_path)
+    output_path.write_text(
+        '{"status": "not-implemented", "repo": "%s"}' % repository_path
+    )
 
     return ToolResult(
         action="run_osv_scanner",

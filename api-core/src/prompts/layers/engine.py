@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from src.prompts.layers.composer import PromptComposer
 from src.prompts.layers.models import (
@@ -56,8 +57,8 @@ class PromptEngine:
     def __init__(
         self,
         *,
-        registry: Optional[ContentRegistry] = None,
-        renderer: Optional[PromptRenderer] = None,
+        registry: ContentRegistry | None = None,
+        renderer: PromptRenderer | None = None,
         use_default_registry: bool = False,
     ) -> None:
         if registry is not None:
@@ -74,17 +75,17 @@ class PromptEngine:
     # Factory helpers
     # ------------------------------------------------------------------
     @classmethod
-    def default(cls) -> "PromptEngine":
+    def default(cls) -> PromptEngine:
         """Engine pre-loaded with the OpenAI (default) prompt module registry."""
         return cls(use_default_registry=True)
 
     @classmethod
-    def for_provider(cls, provider: str) -> "PromptEngine":
+    def for_provider(cls, provider: str) -> PromptEngine:
         """Engine pre-loaded with the registry for ``openai`` or ``xai``."""
         return cls(registry=build_registry_for_provider(provider))
 
     @classmethod
-    def empty(cls) -> "PromptEngine":
+    def empty(cls) -> PromptEngine:
         """Engine with an empty content registry (ideal for unit tests)."""
         return cls(use_default_registry=False)
 
@@ -93,11 +94,11 @@ class PromptEngine:
     # ------------------------------------------------------------------
     def compose_single(
         self,
-        request: Union[SingleLayerRequest, Mapping[str, Any], None] = None,
+        request: SingleLayerRequest | Mapping[str, Any] | None = None,
         *,
         system: str = "",
         user: str = "",
-        variables: Optional[Mapping[str, Any]] = None,
+        variables: Mapping[str, Any] | None = None,
         system_is_template: bool = True,
         user_is_template: bool = True,
     ) -> ComposedPrompt:
@@ -113,14 +114,14 @@ class PromptEngine:
 
     def compose_layers(
         self,
-        layers: Sequence[Union[PromptLayerConfig, Mapping[str, Any]]],
+        layers: Sequence[PromptLayerConfig | Mapping[str, Any]],
         *,
-        variables: Optional[Mapping[str, Any]] = None,
-        context: Optional[Mapping[str, Any]] = None,
-        user_message: Optional[str] = None,
+        variables: Mapping[str, Any] | None = None,
+        context: Mapping[str, Any] | None = None,
+        user_message: str | None = None,
         merge_same_role: bool = False,
         separator: str = "\n\n",
-        mode: Union[PromptMode, str] = PromptMode.MULTI,
+        mode: PromptMode | str = PromptMode.MULTI,
     ) -> ComposedPrompt:
         """Compose a multi-layer (or merged single) stack from layer configs."""
         if isinstance(mode, str):
@@ -137,11 +138,11 @@ class PromptEngine:
 
     def compose_stack(
         self,
-        stack: Union[PromptStackConfig, Mapping[str, Any]],
+        stack: PromptStackConfig | Mapping[str, Any],
         *,
-        variables: Optional[Mapping[str, Any]] = None,
-        context: Optional[Mapping[str, Any]] = None,
-        user_message: Optional[str] = None,
+        variables: Mapping[str, Any] | None = None,
+        context: Mapping[str, Any] | None = None,
+        user_message: str | None = None,
     ) -> ComposedPrompt:
         """Compose from a full stack configuration object."""
         return self.composer.compose_stack(
@@ -154,14 +155,14 @@ class PromptEngine:
     def compose(
         self,
         *,
-        mode: Union[PromptMode, str] = PromptMode.SINGLE,
+        mode: PromptMode | str = PromptMode.SINGLE,
         system: str = "",
         user: str = "",
-        layers: Optional[Sequence[Union[PromptLayerConfig, Mapping[str, Any]]]] = None,
-        stack: Optional[Union[PromptStackConfig, Mapping[str, Any]]] = None,
-        variables: Optional[Mapping[str, Any]] = None,
-        context: Optional[Mapping[str, Any]] = None,
-        user_message: Optional[str] = None,
+        layers: Sequence[PromptLayerConfig | Mapping[str, Any]] | None = None,
+        stack: PromptStackConfig | Mapping[str, Any] | None = None,
+        variables: Mapping[str, Any] | None = None,
+        context: Mapping[str, Any] | None = None,
+        user_message: str | None = None,
         merge_same_role: bool = False,
     ) -> ComposedPrompt:
         """Unified switch between single-layer and multi-layer modes.
@@ -179,7 +180,9 @@ class PromptEngine:
                 stack,
                 variables=variables,
                 context=context,
-                user_message=user_message if user_message is not None else (user or None),
+                user_message=(
+                    user_message if user_message is not None else (user or None)
+                ),
             )
 
         if layers is not None:
@@ -187,7 +190,9 @@ class PromptEngine:
                 layers,
                 variables=variables,
                 context=context,
-                user_message=user_message if user_message is not None else (user or None),
+                user_message=(
+                    user_message if user_message is not None else (user or None)
+                ),
                 merge_same_role=merge_same_role or mode == PromptMode.SINGLE,
                 mode=mode if mode == PromptMode.SINGLE else PromptMode.MULTI,
             )
@@ -204,5 +209,7 @@ class PromptEngine:
     def register(self, key: str, content: str, *, overwrite: bool = False) -> None:
         self.registry.register(key, content, overwrite=overwrite)
 
-    def register_many(self, mapping: Mapping[str, str], *, overwrite: bool = False) -> None:
+    def register_many(
+        self, mapping: Mapping[str, str], *, overwrite: bool = False
+    ) -> None:
         self.registry.register_many(mapping, overwrite=overwrite)

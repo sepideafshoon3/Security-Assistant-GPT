@@ -77,7 +77,7 @@ export function LoginModal({
       // branch stops rendering — no explicit onClose() needed, but calling
       // it is harmless and keeps state tidy if the parent tree changes.
       onClose();
-    } catch (err: any) {
+    } catch (err) {
       setError(err instanceof Error ? err.message : "خطایی پیش آمد.");
     } finally {
       setIsSubmitting(false);
@@ -108,10 +108,7 @@ export function LoginModal({
           <div className="w-12 h-12 bg-gradient-to-br from-brand-cyan to-brand-green rounded-xl flex items-center justify-center shadow-lg shadow-brand-cyan/50 mb-1">
             <ShieldCheck className="w-6 h-6 text-black" aria-hidden />
           </div>
-          <h1
-            id="login-modal-title"
-            className="text-lg text-slate-900 dark:text-gray-100"
-          >
+          <h1 id="login-modal-title" className="text-lg text-slate-900 dark:text-gray-100">
             {mode === "login" ? "ورود به حساب" : "ساخت حساب جدید"}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -123,10 +120,7 @@ export function LoginModal({
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="modal-email"
-              className="text-sm text-slate-700 dark:text-slate-300"
-            >
+            <label htmlFor="modal-email" className="text-sm text-slate-700 dark:text-slate-300">
               ایمیل
             </label>
             <input
@@ -143,10 +137,7 @@ export function LoginModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="modal-password"
-              className="text-sm text-slate-700 dark:text-slate-300"
-            >
+            <label htmlFor="modal-password" className="text-sm text-slate-700 dark:text-slate-300">
               رمز عبور
             </label>
             <input
@@ -189,9 +180,7 @@ export function LoginModal({
               setMode((m) => (m === "login" ? "signup" : "login"));
             }}
           >
-            {mode === "login"
-              ? "حساب نداری؟ ثبت‌نام کن"
-              : "قبلاً حساب ساختی؟ وارد شو"}
+            {mode === "login" ? "حساب نداری؟ ثبت‌نام کن" : "قبلاً حساب ساختی؟ وارد شو"}
           </button>
         </form>
       </div>

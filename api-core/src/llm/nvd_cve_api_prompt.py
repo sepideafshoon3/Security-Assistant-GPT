@@ -1,4 +1,3 @@
-
 NVD_CVE_API_SYSTEM_PROMPT = """
 You have access (through the backend, not directly) to the NVD CVE APIs from NIST.
 Use them conceptually as the authoritative source of vulnerability metadata.

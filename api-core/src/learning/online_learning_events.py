@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
+from typing import Any
 
 from .online_learning_client import OnlineLearningClient
 
-
 # --------- Event Models ---------
+
 
 @dataclass
 class ChatTurnEvent:
@@ -14,10 +14,10 @@ class ChatTurnEvent:
     user_message: str
     assistant_reply: str
     num_history_messages: int
-    model_name: Optional[str] = None
+    model_name: str | None = None
     source: str = "teacher_api.chat"
 
-    def to_payload(self) -> Dict[str, Any]:
+    def to_payload(self) -> dict[str, Any]:
         return {
             "conversation_id": self.conversation_id,
             "user_message": self.user_message,
@@ -26,7 +26,7 @@ class ChatTurnEvent:
             "model_name": self.model_name,
         }
 
-    def to_meta(self) -> Dict[str, Any]:
+    def to_meta(self) -> dict[str, Any]:
         return {
             "source": self.source,
         }
@@ -35,16 +35,16 @@ class ChatTurnEvent:
 @dataclass
 class PipelineResultEvent:
     module_name: str
-    advisory: Dict[str, Any]
-    scenario: Optional[Dict[str, Any]]
-    playbook: Optional[Dict[str, Any]]
-    training_plan: Optional[Dict[str, Any]]
-    exploit: Optional[Dict[str, Any]]
-    risk_level: Optional[str] = None
-    risk_score: Optional[float] = None
+    advisory: dict[str, Any]
+    scenario: dict[str, Any] | None
+    playbook: dict[str, Any] | None
+    training_plan: dict[str, Any] | None
+    exploit: dict[str, Any] | None
+    risk_level: str | None = None
+    risk_score: float | None = None
     source: str = "security_engine.pipeline"
 
-    def to_payload(self) -> Dict[str, Any]:
+    def to_payload(self) -> dict[str, Any]:
         return {
             "module_name": self.module_name,
             "advisory": self.advisory,
@@ -56,7 +56,7 @@ class PipelineResultEvent:
             "risk_score": self.risk_score,
         }
 
-    def to_meta(self) -> Dict[str, Any]:
+    def to_meta(self) -> dict[str, Any]:
         return {
             "source": self.source,
         }
@@ -68,10 +68,10 @@ class ReconScanEvent:
     subdomains_count: int
     vulns_count: int
     assets_count: int
-    risk_score: Optional[float] = None
+    risk_score: float | None = None
     source: str = "recon.pipeline"
 
-    def to_payload(self) -> Dict[str, Any]:
+    def to_payload(self) -> dict[str, Any]:
         return {
             "domain": self.domain,
             "subdomains_count": self.subdomains_count,
@@ -80,7 +80,7 @@ class ReconScanEvent:
             "risk_score": self.risk_score,
         }
 
-    def to_meta(self) -> Dict[str, Any]:
+    def to_meta(self) -> dict[str, Any]:
         return {
             "source": self.source,
         }
@@ -88,12 +88,13 @@ class ReconScanEvent:
 
 # --------- Dispatcher Wrapper ---------
 
+
 class OnlineLearningEventDispatcher:
     """
     Thin wrapper around OnlineLearningClient with typed helpers.
     """
 
-    def __init__(self, client: Optional[OnlineLearningClient]) -> None:
+    def __init__(self, client: OnlineLearningClient | None) -> None:
         self.client = client
 
     def send_chat_turn(self, evt: ChatTurnEvent) -> bool:

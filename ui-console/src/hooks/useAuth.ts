@@ -11,9 +11,7 @@ import {
 
 export function useAuth() {
   const [user, setUser] = useState<UserPublic | null>(() => getStoredUser());
-  const [isCheckingSession, setIsCheckingSession] = useState<boolean>(
-    () => !!getToken(),
-  );
+  const [isCheckingSession, setIsCheckingSession] = useState<boolean>(() => !!getToken());
 
   // On mount, if a token exists, confirm it's still valid against /auth/me.
   useEffect(() => {

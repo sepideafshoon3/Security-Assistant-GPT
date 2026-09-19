@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import List
-import math
-import uuid
 import json
+import uuid
+from pathlib import Path
 
 
-def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> list[str]:
     """
     Split large text into overlapping chunks.
     Simple char-based chunking; good enough for v1.
     """
-    chunks: List[str] = []
+    chunks: list[str] = []
     start = 0
     length = len(text)
 

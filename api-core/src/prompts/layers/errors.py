@@ -37,7 +37,9 @@ class LayerConditionError(PromptLayerError):
 class LayerRegistryError(PromptLayerError):
     """Raised when a content_ref cannot be resolved from the registry."""
 
-    def __init__(self, message: str, *, layer_id: str | None = None, ref: str | None = None) -> None:
+    def __init__(
+        self, message: str, *, layer_id: str | None = None, ref: str | None = None
+    ) -> None:
         self.layer_id = layer_id
         self.ref = ref
         bits = []

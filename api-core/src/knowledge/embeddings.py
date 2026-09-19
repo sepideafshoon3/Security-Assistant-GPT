@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import List, Tuple
 import json
 import math
 import os
-from openai import OpenAI
-from dotenv import load_dotenv  # if you're using python-dotenv
+from pathlib import Path
 
+from dotenv import load_dotenv  # if you're using python-dotenv
+from fastapi import HTTPException
+from openai import OpenAI
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
@@ -17,7 +17,8 @@ client = OpenAI()
 DATA_DIR = BASE_DIR / "data"
 KNOWLEDGE_FILE = DATA_DIR / "knowledge-base" / "knowledge.txt"
 
-def embed_texts(texts: List[str], model: str | None = None) -> List[List[float]]:
+
+def embed_texts(texts: list[str], model: str | None = None) -> list[list[float]]:
     """
     Get embeddings for a list of texts.
     Model defaults to OPENAI_EMBEDDING_MODEL / LLM_EMBEDDING_MODEL from env.
@@ -33,7 +34,7 @@ def embed_texts(texts: List[str], model: str | None = None) -> List[List[float]]
     return [item.embedding for item in resp.data]
 
 
-def l2_distance(a: List[float], b: List[float]) -> float:
+def l2_distance(a: list[float], b: list[float]) -> float:
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
@@ -58,7 +59,7 @@ def build_embeddings_index(resource_dir: Path, model: str | None = None) -> None
             f.write(json.dumps(record) + "\n")
 
 
-def load_embeddings_index(resource_dir: Path) -> List[Tuple[str, List[float]]]:
+def load_embeddings_index(resource_dir: Path) -> list[tuple[str, list[float]]]:
     """
     Load embeddings for a resource: return list of (filename, vector).
     """
@@ -66,7 +67,7 @@ def load_embeddings_index(resource_dir: Path) -> List[Tuple[str, List[float]]]:
     if not idx_path.exists():
         return []
 
-    out: List[Tuple[str, List[float]]] = []
+    out: list[tuple[str, list[float]]] = []
     with idx_path.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
@@ -81,7 +82,7 @@ def semantic_search(
     resource_dir: Path,
     top_k: int = 5,
     model: str | None = None,
-) -> List[str]:
+) -> list[str]:
     """
     Given a question, return the contents of top_k most similar chunks.
     """
@@ -103,12 +104,13 @@ def semantic_search(
     scored.sort(key=lambda x: x[0])
     top = scored[:top_k]
 
-    snippets: List[str] = []
+    snippets: list[str] = []
     for _, fname in top:
         path = resource_dir / fname
         snippets.append(path.read_text(errors="ignore"))
 
     return snippets
+
 
 def load_knowledge_text(max_chars: int = 16000) -> str:
     """

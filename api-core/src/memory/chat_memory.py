@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import List, Dict
 import json
+from pathlib import Path
 
 
 class ChatMemory:
@@ -22,11 +21,11 @@ class ChatMemory:
     def _conv_path(self, conversation_id: str) -> Path:
         return self.base_dir / f"{conversation_id}.jsonl"
 
-    def load_history(self, conversation_id: str) -> List[Dict[str, str]]:
+    def load_history(self, conversation_id: str) -> list[dict[str, str]]:
         path = self._conv_path(conversation_id)
         if not path.exists():
             return []
-        messages: List[Dict[str, str]] = []
+        messages: list[dict[str, str]] = []
         with path.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -42,7 +41,9 @@ class ChatMemory:
                     continue
         return messages
 
-    def save_history(self, conversation_id: str, messages: List[Dict[str, str]]) -> None:
+    def save_history(
+        self, conversation_id: str, messages: list[dict[str, str]]
+    ) -> None:
         """
         Overwrites the conversation file with the last max_messages messages.
         """
@@ -55,9 +56,9 @@ class ChatMemory:
     def append_turn(
         self,
         conversation_id: str,
-        user_msg: Dict[str, str],
-        assistant_msg: Dict[str, str],
-    ) -> List[Dict[str, str]]:
+        user_msg: dict[str, str],
+        assistant_msg: dict[str, str],
+    ) -> list[dict[str, str]]:
         """
         Load history, append user+assistant, save, and return new history.
         """

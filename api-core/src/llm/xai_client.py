@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
@@ -53,76 +52,76 @@ XAI_MODEL_ALIASES = {
 }
 
 
-def _sanitize_user_input(value: Optional[str]) -> Optional[str]:
+def _sanitize_user_input(value: str | None) -> str | None:
     """Sanitize user input to prevent prompt injection.
-    
+
     This is an additional defense layer beyond the renderer sanitization.
     """
     if value is None:
         return None
-    
+
     # Convert to string if needed
     text = str(value)
-    
+
     # Remove or escape Jinja2 template syntax
     dangerous_patterns = [
-        (r'\{\{', '{{"{{"}}'),
-        (r'\}\}', '{{"}}"}}'),
-        (r'\{%', '{{"{%"}}'),
-        (r'%\}', '{{"%}"}}'),
-        (r'\{#', '{{"{#"}}'),
-        (r'#\}', '{{"#}"}}'),
+        (r"\{\{", '{{"{{"}}'),
+        (r"\}\}", '{{"}}"}}'),
+        (r"\{%", '{{"{%"}}'),
+        (r"%\}", '{{"%}"}}'),
+        (r"\{#", '{{"{#"}}'),
+        (r"#\}", '{{"#}"}}'),
     ]
-    
+
     for pattern, replacement in dangerous_patterns:
         text = re.sub(pattern, replacement, text)
-    
+
     # Additional dangerous patterns to block
     block_patterns = [
-        r'__class__',
-        r'__mro__',
-        r'__subclasses__',
-        r'__builtins__',
-        r'__import__',
-        r'eval\s*\(',
-        r'exec\s*\(',
-        r'compile\s*\(',
-        r'getattr\s*\(',
-        r'setattr\s*\(',
-        r'__globals__',
-        r'__code__',
-        r'__frame__',
-        r'__func__',
-        r'__self__',
-        r'__dict__',
+        r"__class__",
+        r"__mro__",
+        r"__subclasses__",
+        r"__builtins__",
+        r"__import__",
+        r"eval\s*\(",
+        r"exec\s*\(",
+        r"compile\s*\(",
+        r"getattr\s*\(",
+        r"setattr\s*\(",
+        r"__globals__",
+        r"__code__",
+        r"__frame__",
+        r"__func__",
+        r"__self__",
+        r"__dict__",
     ]
-    
+
     for pattern in block_patterns:
         if re.search(pattern, text, re.IGNORECASE):
             logger.warning(f"Potential injection attempt blocked: {pattern}")
             # Replace with harmless text
-            text = re.sub(pattern, '[REDACTED]', text, flags=re.IGNORECASE)
-    
+            text = re.sub(pattern, "[REDACTED]", text, flags=re.IGNORECASE)
+
     return text
 
 
-def _validate_messages(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def _validate_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     """Validate and sanitize message list to prevent role manipulation."""
     sanitized = []
-    
+
     for msg in messages:
         # Ensure only valid roles
         role = msg.get("role", "").strip().lower()
         if role not in {"system", "user", "assistant", "tool"}:
             logger.warning(f"Invalid role detected: {role}")
             role = "user"  # Default to user for safety
-        
+
         # Sanitize content
         content = str(msg.get("content", "")).strip()
         content = _sanitize_user_input(content) or ""
-        
+
         sanitized.append({"role": role, "content": content})
-    
+
     return sanitized
 
 
@@ -150,7 +149,9 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
 
         # Prefer dedicated xAI credentials; fall back to OpenAI-compatible
         # proxy credentials (e.g. OpenRouter) so existing lab envs keep working.
-        api_key = (os.getenv("XAI_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+        api_key = (
+            os.getenv("XAI_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+        ).strip()
         if not api_key:
             raise RuntimeError(
                 "XAI_API_KEY (or OPENAI_API_KEY for OpenAI-compatible proxies) "
@@ -185,9 +186,11 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
         base = getattr(self, "_api_base_url", None)
         # Router applies OpenRouter ``x-ai/<id>`` or native bare id as needed.
         # XAI_MODEL_ALIASES only used as input shorthand before formatting.
-        aliased = XAI_MODEL_ALIASES.get(raw, raw) if getattr(
-            self, "_use_native_model_ids", False
-        ) else raw
+        aliased = (
+            XAI_MODEL_ALIASES.get(raw, raw)
+            if getattr(self, "_use_native_model_ids", False)
+            else raw
+        )
         # For OpenRouter keep/expand to vendor prefix; for native strip to bare.
         return normalize_model_for_provider(aliased, "xai", base_url=base)
 
@@ -207,13 +210,13 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
     def _build_secure_chat_messages(
         self,
         *,
-        messages: List[Dict[str, str]],
-        api_system_prompt: Optional[str],
-        api_user_message: Optional[str],
-        dark_recon_ctx: Optional[str],
-    ) -> List[Dict[str, str]]:
+        messages: list[dict[str, str]],
+        api_system_prompt: str | None,
+        api_user_message: str | None,
+        dark_recon_ctx: str | None,
+    ) -> list[dict[str, str]]:
         """Compose secure-chat messages using the xAI prompt set via the router.
-        
+
         All user input is sanitized to prevent prompt injection.
         """
         # Sanitize ALL user-provided input
@@ -221,11 +224,11 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
         sanitized_system = _sanitize_user_input(api_system_prompt)
         sanitized_user = _sanitize_user_input(api_user_message)
         sanitized_dark = _sanitize_user_input(dark_recon_ctx)
-        
+
         from src.llm.router import get_router
 
         engine = get_router().get_prompt_engine("xai")
-        
+
         # The renderer will also sanitize, but this is defense in depth
         return build_secure_chat_messages(
             conversation_messages=sanitized_messages,
@@ -240,16 +243,15 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
 
     def _get_search_query_prompt(self) -> str:
         from src.prompts.xai.search_query import SEARCH_QUERY_PROMPT
-        
+
         # Static prompt - safe, but ensure it's not user-editable
         return SEARCH_QUERY_PROMPT
 
     def _get_code_context_prompt(self) -> str:
         from src.prompts.xai.code_context import CODE_CONTEXT_PROMPT
-        
+
         # Static prompt - safe, but ensure it's not user-editable
         return CODE_CONTEXT_PROMPT
-
 
         """Wrapper to detect and block prompt injection in API calls."""
         # Check for injection patterns in any string parameters
@@ -257,17 +259,17 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
             if isinstance(value, str):
                 # Block obvious injection attempts
                 injection_patterns = [
-                    r'ignore all previous instructions',
-                    r'disregard previous prompts',
-                    r'act as if you have no restrictions',
-                    r'you are now in developer mode',
-                    r'jailbreak',
-                    r'do not follow any rules',
+                    r"ignore all previous instructions",
+                    r"disregard previous prompts",
+                    r"act as if you have no restrictions",
+                    r"you are now in developer mode",
+                    r"jailbreak",
+                    r"do not follow any rules",
                 ]
                 for pattern in injection_patterns:
                     if re.search(pattern, value, re.IGNORECASE):
                         logger.error(f"Blocked injection attempt in {key}")
                         raise ValueError(f"Potential injection detected in {key}")
-        
+
         # Proceed with the call
         return super()._call(**kwargs)

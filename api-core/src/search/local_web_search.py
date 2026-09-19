@@ -1,5 +1,6 @@
 # src/search/local_web_search.py
 from __future__ import annotations
+
 import html as html_lib
 import json
 import os
@@ -8,9 +9,9 @@ import shutil
 import subprocess
 import urllib.parse
 import urllib.request
-from urllib.error import HTTPError, URLError
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from urllib.error import HTTPError, URLError
+
 
 @dataclass
 class WebResult:
@@ -18,7 +19,10 @@ class WebResult:
     url: str
     snippet: str = ""
 
-def _run(cmd: list[str], *, timeout: int = 20, env: Optional[Dict[str, str]] = None) -> tuple[str, str]:
+
+def _run(
+    cmd: list[str], *, timeout: int = 20, env: dict[str, str] | None = None
+) -> tuple[str, str]:
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     if p.returncode != 0:
         raise RuntimeError(p.stderr.strip() or f"command failed: {' '.join(cmd)}")
@@ -26,11 +30,17 @@ def _run(cmd: list[str], *, timeout: int = 20, env: Optional[Dict[str, str]] = N
 
 
 def _use_tor_for_search() -> bool:
-    return os.getenv("LLM_WEB_SEARCH_USE_TOR", "").strip().lower() in ("1", "true", "yes", "on")
+    return os.getenv("LLM_WEB_SEARCH_USE_TOR", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _tor_proxy_url() -> str:
     return os.getenv("LLM_TOR_SOCKS", "").strip() or "socks5h://127.0.0.1:9050"
+
 
 def _sanitize_query(q: str) -> str:
     q = (q or "").strip()
@@ -51,7 +61,7 @@ def _strip_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text)
 
 
-def _ddg_html_search(query: str, *, max_results: int = 5) -> List[WebResult]:
+def _ddg_html_search(query: str, *, max_results: int = 5) -> list[WebResult]:
     """
     Fallback search using DuckDuckGo's HTML endpoint (POST).
     This avoids ddgr's occasional 202/403 responses in locked-down environments.
@@ -75,16 +85,16 @@ def _ddg_html_search(query: str, *, max_results: int = 5) -> List[WebResult]:
 
     link_re = re.compile(
         r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
-        re.I | re.S,
+        re.IGNORECASE | re.DOTALL,
     )
     snippet_re = re.compile(
         r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
-        re.I | re.S,
+        re.IGNORECASE | re.DOTALL,
     )
     links = link_re.findall(html)
     snippets = snippet_re.findall(html)
 
-    results: List[WebResult] = []
+    results: list[WebResult] = []
     for idx, (url, title_html) in enumerate(links):
         title = html_lib.unescape(_strip_tags(title_html)).strip()
         snippet = ""
@@ -113,9 +123,18 @@ def _is_ddgr_block_error(msg: str) -> bool:
         return False
     msg = msg.lower()
     # DuckDuckGo occasionally returns non-200 responses to CLI clients.
-    return any(code in msg for code in ("http error 202", "http error 403", "http error 429", "http error 503"))
+    return any(
+        code in msg
+        for code in (
+            "http error 202",
+            "http error 403",
+            "http error 429",
+            "http error 503",
+        )
+    )
 
-def web_search(query: str, *, max_results: int = 5) -> List[WebResult]:
+
+def web_search(query: str, *, max_results: int = 5) -> list[WebResult]:
     """
     Local web search using a CLI tool.
     Recommended: ddgr (DuckDuckGo CLI). Requires install on server.
@@ -146,22 +165,32 @@ def web_search(query: str, *, max_results: int = 5) -> List[WebResult]:
             raise RuntimeError(err.strip())
 
         data = json.loads(out) if out.strip() else []
-        results: List[WebResult] = []
+        results: list[WebResult] = []
         for item in data[:max_results]:
             title = str(item.get("title", "")) or ""
             url = str(item.get("url", "")) or ""
-            snippet = str(item.get("abstract", "")) or str(item.get("snippet", "")) or ""
+            snippet = (
+                str(item.get("abstract", "")) or str(item.get("snippet", "")) or ""
+            )
             if not url.strip():
                 continue
-            results.append(WebResult(
-                title=title,
-                url=url,
-                snippet=snippet,
-            ))
+            results.append(
+                WebResult(
+                    title=title,
+                    url=url,
+                    snippet=snippet,
+                )
+            )
         if results:
             return results
         # ddgr sometimes returns empty results with no error; fall back to HTML
         return _ddg_html_search(query, max_results=max_results)
-    except (FileNotFoundError, subprocess.TimeoutExpired, HTTPError, URLError, RuntimeError):
+    except (
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+        HTTPError,
+        URLError,
+        RuntimeError,
+    ):
         # ddgr missing, blocked, or timed out; attempt HTML fallback
         return _ddg_html_search(query, max_results=max_results)

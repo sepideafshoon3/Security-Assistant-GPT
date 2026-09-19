@@ -1,28 +1,29 @@
 """
 Web‑search wrapper used by the planning agent.
 
-Primary implementation uses **ddgr** (DuckDuckGo CLI).  
+Primary implementation uses **ddgr** (DuckDuckGo CLI).
 If ddgr is missing or blocked, we fall back to a lightweight HTML scrape of DuckDuckGo.
 """
 
 from __future__ import annotations
+
+import datetime
 import json
-import os
+import re
 import subprocess
-import shutil
 import urllib.parse
 import urllib.request
-import re
-from typing import List, Dict, Any
 from html.parser import HTMLParser
-import datetime
+from typing import Any
+
+
 # ----------------------------------------------------------------------
 # Helper HTML parser (strip tags)
 # ----------------------------------------------------------------------
 class _HTMLStripper(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
-        self._data: List[str] = []
+        self._data: list[str] = []
 
     def handle_data(self, d: str) -> None:
         self._data.append(d)
@@ -40,7 +41,9 @@ def _strip_html(html: str) -> str:
 # ----------------------------------------------------------------------
 # Low‑level command runner
 # ----------------------------------------------------------------------
-def _run_cmd(cmd: List[str], *, timeout: int = 20, env: Dict[str, str] | None = None) -> str:
+def _run_cmd(
+    cmd: list[str], *, timeout: int = 20, env: dict[str, str] | None = None
+) -> str:
     proc = subprocess.run(
         cmd,
         capture_output=True,
@@ -56,7 +59,7 @@ def _run_cmd(cmd: List[str], *, timeout: int = 20, env: Dict[str, str] | None = 
 # ----------------------------------------------------------------------
 # HTML fallback (no ddgr)
 # ----------------------------------------------------------------------
-def _ddg_html_search(query: str, *, max_results: int = 5) -> List[Dict[str, Any]]:
+def _ddg_html_search(query: str, *, max_results: int = 5) -> list[dict[str, Any]]:
     query = query.strip()
     if not query:
         return []
@@ -71,8 +74,13 @@ def _ddg_html_search(query: str, *, max_results: int = 5) -> List[Dict[str, Any]
         html = resp.read().decode(errors="ignore")
 
     # Very simple extraction – title + url + snippet
-    link_re = re.compile(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S)
-    snippet_re = re.compile(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', re.I | re.S)
+    link_re = re.compile(
+        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    snippet_re = re.compile(
+        r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
+    )
 
     links = link_re.findall(html)
     snippets = snippet_re.findall(html)
@@ -98,7 +106,7 @@ def _ddg_html_search(query: str, *, max_results: int = 5) -> List[Dict[str, Any]
 # ----------------------------------------------------------------------
 # Public API
 # ----------------------------------------------------------------------
-def search_web(query: str, *, max_results: int = 5) -> List[Dict[str, Any]]:
+def search_web(query: str, *, max_results: int = 5) -> list[dict[str, Any]]:
     """
     Perform a web search and return a list of dicts:
     {
@@ -121,7 +129,8 @@ def search_web(query: str, *, max_results: int = 5) -> List[Dict[str, Any]]:
             {
                 "title": str(item.get("title", "")),
                 "url": str(item.get("url", "")),
-                "snippet": str(item.get("abstract", "")) or str(item.get("snippet", "")),
+                "snippet": str(item.get("abstract", ""))
+                or str(item.get("snippet", "")),
                 "source": "ddgr",
                 "published_date": None,
             }
@@ -137,11 +146,13 @@ def search_web(query: str, *, max_results: int = 5) -> List[Dict[str, Any]]:
     return _ddg_html_search(query, max_results=max_results)
 
 
-def normalize_results(query_id: str, query: str, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def normalize_results(
+    query_id: str, query: str, results: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """
     Convert raw search results into the unified EvidenceItem shape.
     """
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now = datetime.datetime.now(datetime.UTC).isoformat()
     normalized = []
     for i, r in enumerate(results):
         normalized.append(

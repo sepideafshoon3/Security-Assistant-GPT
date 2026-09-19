@@ -1,37 +1,83 @@
 import io
 import zipfile
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
+
 from fastapi import HTTPException
 
 # Common text / code / config extensions
 TEXT_EXTENSIONS = {
     # plain text / docs
-    ".txt", ".md", ".rst", ".log",
+    ".txt",
+    ".md",
+    ".rst",
+    ".log",
     # Python
-    ".py", ".pyw", ".pyi",
+    ".py",
+    ".pyw",
+    ".pyi",
     # JS / TS / Node
-    ".js", ".mjs", ".cjs", ".ts", ".tsx",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
     # Web
-    ".html", ".htm", ".css", ".scss", ".sass",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
     # JSON / config
-    ".json", ".jsonc", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env",
+    ".json",
+    ".jsonc",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".env",
     # C / C++ / ObjC
-    ".c", ".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx", ".m", ".mm",
+    ".c",
+    ".h",
+    ".hpp",
+    ".hh",
+    ".cpp",
+    ".cc",
+    ".cxx",
+    ".m",
+    ".mm",
     # Java / Kotlin
-    ".java", ".kt", ".kts",
+    ".java",
+    ".kt",
+    ".kts",
     # C#
     ".cs",
     # Go / Rust
-    ".go", ".rs",
+    ".go",
+    ".rs",
     # PHP / Ruby
-    ".php", ".phtml", ".rb", ".erb",
+    ".php",
+    ".phtml",
+    ".rb",
+    ".erb",
     # Shell / scripting
-    ".sh", ".bash", ".zsh", ".ps1", ".psm1",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".ps1",
+    ".psm1",
     # SQL / data
-    ".sql", ".csv", ".tsv",
+    ".sql",
+    ".csv",
+    ".tsv",
     # Misc dev files
-    ".gradle", ".pom", ".xaml", ".vue", ".svelte",
+    ".gradle",
+    ".pom",
+    ".xaml",
+    ".vue",
+    ".svelte",
 }
 
 
@@ -48,10 +94,7 @@ def _looks_like_text(raw: bytes, sample_size: int = 2048) -> bool:
     if b"\x00" in sample:
         return False
 
-    text_chars = sum(
-        chr(b).isprintable() or chr(b).isspace()
-        for b in sample
-    )
+    text_chars = sum(chr(b).isprintable() or chr(b).isspace() for b in sample)
     ratio = text_chars / len(sample)
     return ratio > 0.7  # at least 70% printable → treat as text
 
@@ -126,7 +169,7 @@ def grep_zip_resource(
     after: int = 10,
     max_matches: int = 50,
     ignore_case: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Grep for `keyword` across all text-ish files in a ZIP.
 
@@ -154,7 +197,7 @@ def grep_zip_resource(
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid ZIP file")
 
-    matches: List[Dict[str, Any]] = []
+    matches: list[dict[str, Any]] = []
     needle = keyword.lower() if ignore_case else keyword
 
     for info in zf.infolist():

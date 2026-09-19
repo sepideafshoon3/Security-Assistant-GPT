@@ -1,8 +1,8 @@
-from typing import List, Tuple, Optional, Iterable
+from collections.abc import Iterable
 
 
 def combine_resources(
-    resources: Optional[Iterable[Optional[Tuple[str, str]]]],
+    resources: Iterable[tuple[str, str] | None] | None,
     max_chars: int = 16000,
 ) -> str:
     """
@@ -14,7 +14,7 @@ def combine_resources(
     if not resources:
         return "(no resource content)"
 
-    chunks: List[str] = []
+    chunks: list[str] = []
     total = 0
 
     for item in resources:

@@ -3,9 +3,10 @@
 import re
 from pathlib import Path
 
+from src.agents.dark_recon_agent import run_dark_recon_agent
 from src.llm.openai_client import load_llm_config
 from src.llm.router import create_advisor
-from src.agents.dark_recon_agent import run_dark_recon_agent
+
 
 def handle_user_text(raw_text: str, config_dir: Path) -> str:
     # LLM (OpenAI or xAI via central router)

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 
 from src.prompts.layers.errors import LayerConfigError, LayerRegistryError
 from src.prompts.layers.models import (
@@ -28,8 +29,8 @@ class PromptComposer:
     def __init__(
         self,
         *,
-        registry: Optional[ContentRegistry] = None,
-        renderer: Optional[PromptRenderer] = None,
+        registry: ContentRegistry | None = None,
+        renderer: PromptRenderer | None = None,
     ) -> None:
         self.registry = registry if registry is not None else ContentRegistry()
         self.renderer = renderer or PromptRenderer(strict_undefined=True)
@@ -39,11 +40,11 @@ class PromptComposer:
     # ------------------------------------------------------------------
     def compose_single(
         self,
-        request: Union[SingleLayerRequest, Mapping[str, Any], None] = None,
+        request: SingleLayerRequest | Mapping[str, Any] | None = None,
         *,
         system: str = "",
         user: str = "",
-        variables: Optional[Mapping[str, Any]] = None,
+        variables: Mapping[str, Any] | None = None,
         system_is_template: bool = True,
         user_is_template: bool = True,
     ) -> ComposedPrompt:
@@ -75,8 +76,8 @@ class PromptComposer:
         else:
             user_out = user or ""
 
-        messages: List[Dict[str, str]] = []
-        applied: List[AppliedLayerInfo] = []
+        messages: list[dict[str, str]] = []
+        applied: list[AppliedLayerInfo] = []
         if system_out:
             messages.append({"role": "system", "content": system_out})
             applied.append(
@@ -114,13 +115,13 @@ class PromptComposer:
         self,
         layers: Sequence[LayerInput],
         *,
-        variables: Optional[Mapping[str, Any]] = None,
-        context: Optional[Mapping[str, Any]] = None,
-        user_message: Optional[str] = None,
+        variables: Mapping[str, Any] | None = None,
+        context: Mapping[str, Any] | None = None,
+        user_message: str | None = None,
         merge_same_role: bool = False,
         separator: str = "\n\n",
         mode: PromptMode = PromptMode.MULTI,
-        stack_name: Optional[str] = None,
+        stack_name: str | None = None,
     ) -> ComposedPrompt:
         """Compose an ordered, prioritised, conditional layer stack."""
         parsed = [self._parse_layer(item, index=i) for i, item in enumerate(layers)]
@@ -136,9 +137,9 @@ class PromptComposer:
             key=lambda layer: (layer.order, -layer.priority, layer.id),
         )
 
-        applied: List[AppliedLayerInfo] = []
-        skipped: List[SkippedLayerInfo] = []
-        rendered_parts: List[tuple[PromptLayerConfig, str]] = []
+        applied: list[AppliedLayerInfo] = []
+        skipped: list[SkippedLayerInfo] = []
+        rendered_parts: list[tuple[PromptLayerConfig, str]] = []
 
         for layer in ordered:
             if not layer.enabled:
@@ -215,9 +216,9 @@ class PromptComposer:
         self,
         stack: StackInput,
         *,
-        variables: Optional[Mapping[str, Any]] = None,
-        context: Optional[Mapping[str, Any]] = None,
-        user_message: Optional[str] = None,
+        variables: Mapping[str, Any] | None = None,
+        context: Mapping[str, Any] | None = None,
+        user_message: str | None = None,
     ) -> ComposedPrompt:
         """Compose from a named :class:`PromptStackConfig`."""
         cfg = self._parse_stack(stack)
@@ -267,7 +268,7 @@ class PromptComposer:
         self,
         layers: Sequence[PromptLayerConfig],
         *,
-        stack_name: Optional[str],
+        stack_name: str | None,
     ) -> None:
         seen: set[str] = set()
         for layer in layers:
@@ -310,13 +311,13 @@ class PromptComposer:
         parts: Sequence[tuple[PromptLayerConfig, str]],
         *,
         separator: str,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         if not parts:
             return []
 
-        messages: List[Dict[str, str]] = []
-        current_role: Optional[PromptRole] = None
-        bucket: List[str] = []
+        messages: list[dict[str, str]] = []
+        current_role: PromptRole | None = None
+        bucket: list[str] = []
 
         def flush() -> None:
             nonlocal current_role, bucket

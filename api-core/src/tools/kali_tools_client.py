@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict
 from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
-
 
 KALI_TOOLS_URL = "https://www.kali.org/tools/"
 
 
 @dataclass
 class KaliTool:
-    slug: str           # e.g., "hydra"
-    name: str           # e.g., "hydra"
-    summary: str        # very short description or category
+    slug: str  # e.g., "hydra"
+    name: str  # e.g., "hydra"
+    summary: str  # very short description or category
 
 
 class KaliToolsClient:
@@ -30,10 +28,10 @@ class KaliToolsClient:
     - Use this metadata to talk about tools defensively.
     """
 
-    def __init__(self, session: Optional[requests.Session] = None) -> None:
+    def __init__(self, session: requests.Session | None = None) -> None:
         self.session = session or requests.Session()
 
-    def _normalize_tool_href(self, href: str) -> Optional[str]:
+    def _normalize_tool_href(self, href: str) -> str | None:
         """
         Normalize a tools href to a full https://www.kali.org/tools/<slug>/ URL.
         Return None if it's not a tool link.
@@ -56,7 +54,7 @@ class KaliToolsClient:
 
         return None
 
-    def list_tools(self, limit: Optional[int] = None) -> List[KaliTool]:
+    def list_tools(self, limit: int | None = None) -> list[KaliTool]:
         """
         Fetch the 'all tools' page and extract a list of tools.
 
@@ -68,7 +66,7 @@ class KaliToolsClient:
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        tools: List[KaliTool] = []
+        tools: list[KaliTool] = []
         seen_slugs: set[str] = set()
 
         # The layout (from your HTML) uses a ton of <div class="card"><h3>…><ul><li><a href=".../tools/...">
@@ -123,7 +121,9 @@ class KaliToolsClient:
 
         return tools
 
-    def to_llm_context(self, tools: List[KaliTool], max_tools: int = 500000000000000000) -> str:
+    def to_llm_context(
+        self, tools: list[KaliTool], max_tools: int = 500000000000000000
+    ) -> str:
         """
         Build a compact text block summarizing tools for the LLM.
 

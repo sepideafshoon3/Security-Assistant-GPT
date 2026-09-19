@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from src.prompts.layers.engine import PromptEngine
 from src.prompts.layers.models import ComposedPrompt, PromptMode
-from src.prompts.layers.stacks import build_secure_chat_stack, build_planner_stack
+from src.prompts.layers.stacks import build_planner_stack, build_secure_chat_stack
 
 
 def _env_prompt_mode() -> str:
@@ -18,7 +19,11 @@ def _env_prompt_mode() -> str:
       - ``multi`` (default): discrete system messages per layer
       - ``single``: merge same-role layers into one system + user
     """
-    raw = (os.getenv("MRROBOT_PROMPT_MODE") or os.getenv("PROMPT_MODE") or "multi").strip().lower()
+    raw = (
+        (os.getenv("MRROBOT_PROMPT_MODE") or os.getenv("PROMPT_MODE") or "multi")
+        .strip()
+        .lower()
+    )
     if raw in {"single", "multi"}:
         return raw
     return "multi"
@@ -26,12 +31,16 @@ def _env_prompt_mode() -> str:
 
 def _env_include_grok() -> bool:
     """Read whether to include Grok prompt from environment.
-    
+
     Values:
       - ``true``, ``1``, ``yes``: include Grok prompt
       - Default: ``false`` for OpenAI, but auto-enabled for XAI
     """
-    raw = (os.getenv("MRROBOT_INCLUDE_GROK") or os.getenv("INCLUDE_GROK") or "").strip().lower()
+    raw = (
+        (os.getenv("MRROBOT_INCLUDE_GROK") or os.getenv("INCLUDE_GROK") or "")
+        .strip()
+        .lower()
+    )
     if raw in {"true", "1", "yes", "on"}:
         return True
     if raw in {"false", "0", "no", "off"}:
@@ -40,16 +49,16 @@ def _env_include_grok() -> bool:
     return False
 
 
-def _normalize_provider(provider: Optional[str]) -> str:
+def _normalize_provider(provider: str | None) -> str:
     cleaned = (provider or "openai").strip().lower()
     if cleaned in {"xai", "x", "x-ai"}:
         return "xai"
     return "openai"
 
 
-def _should_include_grok(provider: str, explicit: Optional[bool] = None) -> bool:
+def _should_include_grok(provider: str, explicit: bool | None = None) -> bool:
     """Determine if Grok prompt should be included.
-    
+
     Priority:
     1. Explicit override if provided
     2. Environment variable
@@ -79,13 +88,13 @@ def get_default_engine() -> PromptEngine:
 def build_secure_chat_composed(
     *,
     security_mode: bool,
-    api_system_prompt: Optional[str] = None,
-    api_user_message: Optional[str] = None,
-    dark_recon_ctx: Optional[str] = None,
-    mode: Optional[str] = None,
-    engine: Optional[PromptEngine] = None,
-    provider: Optional[str] = None,
-    include_grok: Optional[bool] = None,  # NEW: explicit override
+    api_system_prompt: str | None = None,
+    api_user_message: str | None = None,
+    dark_recon_ctx: str | None = None,
+    mode: str | None = None,
+    engine: PromptEngine | None = None,
+    provider: str | None = None,
+    include_grok: bool | None = None,  # NEW: explicit override
 ) -> ComposedPrompt:
     """Compose secure_chat system/context layers via the prompt engine.
 
@@ -94,7 +103,7 @@ def build_secure_chat_composed(
 
     When *engine* is omitted, *provider* selects the prompt package
     (``openai`` default, or ``xai``).
-    
+
     When *include_grok* is omitted, it's auto-enabled for XAI provider.
     """
     resolved_provider = _normalize_provider(provider)
@@ -108,7 +117,7 @@ def build_secure_chat_composed(
     has_api_system = bool(api_system_prompt and str(api_system_prompt).strip())
     has_api_user = bool(api_user_message and str(api_user_message).strip())
     has_dark_recon = bool(dark_recon_ctx and str(dark_recon_ctx).strip())
-    
+
     # Determine if Grok should be included
     grok_enabled = _should_include_grok(resolved_provider, include_grok)
 
@@ -123,7 +132,7 @@ def build_secure_chat_composed(
         provider=resolved_provider,  # NEW: pass provider
     )
 
-    context: Dict[str, Any] = {
+    context: dict[str, Any] = {
         "security_mode": security_mode,
         "has_api_system": has_api_system,
         "has_api_user": has_api_user,
@@ -131,7 +140,7 @@ def build_secure_chat_composed(
         "has_grok": grok_enabled,  # NEW: track Grok in context
         "provider": resolved_provider,  # NEW: track provider in context
     }
-    variables: Dict[str, Any] = {
+    variables: dict[str, Any] = {
         "api_system_prompt": api_system_prompt or "",
         "api_user_message": api_user_message or "",
         "dark_recon_ctx": dark_recon_ctx or "",
@@ -143,30 +152,31 @@ def build_secure_chat_composed(
         eng = get_engine_for_provider(provider)
     else:
         eng = get_default_engine()
-    
+
     composed = eng.compose_stack(stack, variables=variables, context=context)
-    
+
     # Log that Grok was included if enabled
     if grok_enabled:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.info(f"[prompt] Grok prompt included for provider={resolved_provider}")
-    
+
     return composed
 
 
 def build_secure_chat_messages(
     *,
-    conversation_messages: Sequence[Dict[str, str]],
+    conversation_messages: Sequence[dict[str, str]],
     security_mode: bool = True,
-    api_system_prompt: Optional[str] = None,
-    api_user_message: Optional[str] = None,
-    dark_recon_ctx: Optional[str] = None,
-    mode: Optional[str] = None,
-    engine: Optional[PromptEngine] = None,
-    provider: Optional[str] = None,
-    include_grok: Optional[bool] = None,  # NEW: explicit override
-) -> List[Dict[str, str]]:
+    api_system_prompt: str | None = None,
+    api_user_message: str | None = None,
+    dark_recon_ctx: str | None = None,
+    mode: str | None = None,
+    engine: PromptEngine | None = None,
+    provider: str | None = None,
+    include_grok: bool | None = None,  # NEW: explicit override
+) -> list[dict[str, str]]:
     """Full message list: composed layers + conversation history.
 
     This is the single source of truth for secure-chat message construction.
@@ -182,7 +192,7 @@ def build_secure_chat_messages(
         provider=provider,
         include_grok=include_grok,
     )
-    out: List[Dict[str, str]] = list(composed.as_chat_messages())
+    out: list[dict[str, str]] = list(composed.as_chat_messages())
     out.extend(list(conversation_messages or []))
     return out
 
@@ -191,10 +201,10 @@ def build_planner_prompts(
     *,
     user_request: str,
     with_evidence: bool = False,
-    evidence_variables: Optional[Dict[str, Any]] = None,
-    engine: Optional[PromptEngine] = None,
-    provider: Optional[str] = None,
-    include_grok: Optional[bool] = None,  # NEW: explicit override
+    evidence_variables: dict[str, Any] | None = None,
+    engine: PromptEngine | None = None,
+    provider: str | None = None,
+    include_grok: bool | None = None,  # NEW: explicit override
 ) -> ComposedPrompt:
     """Single-layer-compatible planner system+user composition.
 
@@ -210,14 +220,14 @@ def build_planner_prompts(
         eng = get_engine_for_provider(provider)
     else:
         eng = get_default_engine()
-    
+
     stack = build_planner_stack(
         with_evidence=with_evidence,
         mode=PromptMode.SINGLE,
         provider=resolved_provider,  # NEW: pass provider
         include_grok=grok_enabled,  # NEW: pass Grok flag
     )
-    
+
     variables = dict(evidence_variables or {})
     variables.setdefault("user_request", user_request)
 
@@ -241,10 +251,11 @@ def build_planner_prompts(
         msgs = [m for m in composed.messages if m.get("role") != "user"]
         msgs.append({"role": "user", "content": str(user_body)})
         composed = composed.model_copy(update={"messages": msgs})
-    
+
     # Log that Grok was included if enabled
     if grok_enabled:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.info(f"[planner] Grok prompt included for provider={resolved_provider}")
 
@@ -253,13 +264,14 @@ def build_planner_prompts(
 
 # NEW: Convenience functions for specific providers
 
+
 def build_secure_chat_composed_for_openai(
     *,
     security_mode: bool = True,
-    api_system_prompt: Optional[str] = None,
-    api_user_message: Optional[str] = None,
-    dark_recon_ctx: Optional[str] = None,
-    mode: Optional[str] = None,
+    api_system_prompt: str | None = None,
+    api_user_message: str | None = None,
+    dark_recon_ctx: str | None = None,
+    mode: str | None = None,
 ) -> ComposedPrompt:
     """Convenience function for OpenAI provider (no Grok)."""
     return build_secure_chat_composed(
@@ -276,10 +288,10 @@ def build_secure_chat_composed_for_openai(
 def build_secure_chat_composed_for_xai(
     *,
     security_mode: bool = True,
-    api_system_prompt: Optional[str] = None,
-    api_user_message: Optional[str] = None,
-    dark_recon_ctx: Optional[str] = None,
-    mode: Optional[str] = None,
+    api_system_prompt: str | None = None,
+    api_user_message: str | None = None,
+    dark_recon_ctx: str | None = None,
+    mode: str | None = None,
     include_grok: bool = True,  # Default True for XAI
 ) -> ComposedPrompt:
     """Convenience function for XAI provider (Grok enabled by default)."""
@@ -298,7 +310,7 @@ def build_planner_prompts_for_openai(
     *,
     user_request: str,
     with_evidence: bool = False,
-    evidence_variables: Optional[Dict[str, Any]] = None,
+    evidence_variables: dict[str, Any] | None = None,
 ) -> ComposedPrompt:
     """Convenience function for OpenAI planner (no Grok)."""
     return build_planner_prompts(
@@ -314,7 +326,7 @@ def build_planner_prompts_for_xai(
     *,
     user_request: str,
     with_evidence: bool = False,
-    evidence_variables: Optional[Dict[str, Any]] = None,
+    evidence_variables: dict[str, Any] | None = None,
     include_grok: bool = True,  # Default True for XAI
 ) -> ComposedPrompt:
     """Convenience function for XAI planner (Grok enabled by default)."""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -32,33 +32,33 @@ class PromptLayerConfig(BaseModel):
     id: str = Field(..., min_length=1, description="Stable layer identifier")
     role: PromptRole = PromptRole.SYSTEM
     # Content sources (exactly one required after validation)
-    content: Optional[str] = Field(
+    content: str | None = Field(
         default=None,
         description="Literal or Jinja2 template body",
     )
-    template: Optional[str] = Field(
+    template: str | None = Field(
         default=None,
         description="Alias for content (Jinja2 template body)",
     )
-    content_ref: Optional[str] = Field(
+    content_ref: str | None = Field(
         default=None,
         description="Registry key resolving to a known prompt string",
     )
     enabled: bool = True
     order: int = 0
     priority: int = 0
-    condition: Optional[str] = Field(
+    condition: str | None = Field(
         default=None,
         description=(
             "Optional Jinja2 boolean expression evaluated against context "
             "(e.g. 'security_mode and has_dark_recon')"
         ),
     )
-    variables: Dict[str, Any] = Field(
+    variables: dict[str, Any] = Field(
         default_factory=dict,
         description="Layer-local variables merged under global variables",
     )
-    required_variables: List[str] = Field(
+    required_variables: list[str] = Field(
         default_factory=list,
         description="Variable names that must be present when rendering",
     )
@@ -73,14 +73,14 @@ class PromptLayerConfig(BaseModel):
 
     @field_validator("condition")
     @classmethod
-    def _condition_strip(cls, value: Optional[str]) -> Optional[str]:
+    def _condition_strip(cls, value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = value.strip()
         return cleaned or None
 
     @model_validator(mode="after")
-    def _require_content_source(self) -> "PromptLayerConfig":
+    def _require_content_source(self) -> PromptLayerConfig:
         has_content = self.content is not None
         has_template = self.template is not None
         has_ref = bool(self.content_ref and self.content_ref.strip())
@@ -92,12 +92,10 @@ class PromptLayerConfig(BaseModel):
         if has_content and has_template:
             raise ValueError("provide either content or template, not both")
         if has_ref and (has_content or has_template):
-            raise ValueError(
-                "content_ref cannot be combined with content or template"
-            )
+            raise ValueError("content_ref cannot be combined with content or template")
         return self
 
-    def resolved_template(self) -> Optional[str]:
+    def resolved_template(self) -> str | None:
         """Return the template body if this layer uses inline content."""
         if self.template is not None:
             return self.template
@@ -111,7 +109,7 @@ class PromptStackConfig(BaseModel):
 
     name: str = Field(..., min_length=1)
     mode: PromptMode = PromptMode.MULTI
-    layers: List[PromptLayerConfig] = Field(default_factory=list)
+    layers: list[PromptLayerConfig] = Field(default_factory=list)
     merge_same_role: bool = Field(
         default=False,
         description=(
@@ -133,7 +131,7 @@ class PromptStackConfig(BaseModel):
         return cleaned
 
     @model_validator(mode="after")
-    def _validate_unique_ids(self) -> "PromptStackConfig":
+    def _validate_unique_ids(self) -> PromptStackConfig:
         seen: set[str] = set()
         dupes: list[str] = []
         for layer in self.layers:
@@ -166,16 +164,16 @@ class ComposedPrompt(BaseModel):
     mode: PromptMode
     system: str = ""
     user: str = ""
-    messages: List[Dict[str, str]] = Field(default_factory=list)
-    applied_layers: List[AppliedLayerInfo] = Field(default_factory=list)
-    skipped_layers: List[SkippedLayerInfo] = Field(default_factory=list)
-    stack_name: Optional[str] = None
+    messages: list[dict[str, str]] = Field(default_factory=list)
+    applied_layers: list[AppliedLayerInfo] = Field(default_factory=list)
+    skipped_layers: list[SkippedLayerInfo] = Field(default_factory=list)
+    stack_name: str | None = None
 
     def as_chat_messages(
         self,
         *,
         include_empty: bool = False,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Return OpenAI-style chat messages.
 
         Prefer ``messages`` when multi-layer produced discrete role turns;
@@ -186,7 +184,7 @@ class ComposedPrompt(BaseModel):
                 return list(self.messages)
             return [m for m in self.messages if (m.get("content") or "").strip()]
 
-        out: List[Dict[str, str]] = []
+        out: list[dict[str, str]] = []
         if self.system or include_empty:
             out.append({"role": "system", "content": self.system})
         if self.user or include_empty:
@@ -199,6 +197,6 @@ class SingleLayerRequest(BaseModel):
 
     system: str = ""
     user: str = ""
-    variables: Dict[str, Any] = Field(default_factory=dict)
+    variables: dict[str, Any] = Field(default_factory=dict)
     system_is_template: bool = True
     user_is_template: bool = True

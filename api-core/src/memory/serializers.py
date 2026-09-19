@@ -1,5 +1,6 @@
-from pydantic import BaseModel
 from pathlib import Path
+
+from pydantic import BaseModel
 
 
 def save_model(model: BaseModel, path: Path) -> None:

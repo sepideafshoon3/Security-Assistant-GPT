@@ -57,9 +57,5 @@ export function extractFindings(text: string): Findings {
 }
 
 export function hasNotableFindings(findings: Findings): boolean {
-  return (
-    findings.severity !== "clean" ||
-    findings.cves.length > 0 ||
-    findings.tools.length > 0
-  );
+  return findings.severity !== "clean" || findings.cves.length > 0 || findings.tools.length > 0;
 }

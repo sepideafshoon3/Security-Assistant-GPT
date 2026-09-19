@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from src.core.executor import Executor
 from src.core.paths import BASE_DIR
@@ -48,7 +48,7 @@ chat_memory = ChatMemory(CHAT_MEMORY_DIR, max_messages=50)
 _llm_router = get_router()
 
 
-def resolve_llm_advisor(model_override: Optional[str] = None) -> Any:
+def resolve_llm_advisor(model_override: str | None = None) -> Any:
     """Return the LLM advisor for the default config or a per-request model.
 
     Public call sites keep using ``executor.llm_advisor`` when no override is
@@ -110,19 +110,22 @@ def resolve_llm_advisor(model_override: Optional[str] = None) -> Any:
 online_learning_endpoint = os.getenv("ONLINE_LEARNING_ENDPOINT")
 online_learning_api_key = os.getenv("ONLINE_LEARNING_API_KEY")
 
-online_learning_client: Optional[OnlineLearningClient] = None
+online_learning_client: OnlineLearningClient | None = None
 if online_learning_endpoint:
     online_learning_client = OnlineLearningClient(
         endpoint_url=online_learning_endpoint,
         api_key=online_learning_api_key,
         timeout=float(os.getenv("ONLINE_LEARNING_TIMEOUT", "5.0")),
-        verify_ssl=os.getenv("ONLINE_LEARNING_VERIFY_SSL", "false").lower() in ("1", "true", "yes"),
+        verify_ssl=os.getenv("ONLINE_LEARNING_VERIFY_SSL", "false").lower()
+        in ("1", "true", "yes"),
     )
     logger.info(
         "[online-learning] client enabled | endpoint=%s",
         online_learning_endpoint,
     )
 else:
-    logger.warning("[online-learning] client disabled | ONLINE_LEARNING_ENDPOINT not set")
+    logger.warning(
+        "[online-learning] client disabled | ONLINE_LEARNING_ENDPOINT not set"
+    )
 
 online_learning_dispatcher = OnlineLearningEventDispatcher(online_learning_client)

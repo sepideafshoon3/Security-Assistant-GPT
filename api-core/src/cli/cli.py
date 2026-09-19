@@ -1,18 +1,17 @@
 import argparse
-from pathlib import Path
 import uuid
+from pathlib import Path
 
+from src.policies.loader import load_policy_engine
+
+from src.core.executor import Executor
 from src.core.models import Task
 from src.core.planner import Planner
-from src.core.executor import Executor
-from src.policies.loader import load_policy_engine
 from src.security.audit import audit_log
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Security Assistant GPT (lab) CLI"
-    )
+    parser = argparse.ArgumentParser(description="Security Assistant GPT (lab) CLI")
     parser.add_argument(
         "repository_path",
         help="Path to repository inside lab scope",

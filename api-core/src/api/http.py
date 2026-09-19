@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -28,6 +28,7 @@ load_dotenv(BASE_DIR / ".env")
 # monolithic http.py, where these singletons were only ever constructed
 # after setup_logging() had already run.
 
+
 def setup_logging() -> None:
     """
     Logging controlled by env:
@@ -37,7 +38,7 @@ def setup_logging() -> None:
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
-    handlers: List[logging.Handler] = []
+    handlers: list[logging.Handler] = []
 
     console = logging.StreamHandler()
     console.setLevel(level)
@@ -64,13 +65,13 @@ logger = logging.getLogger(__name__)
 # Remaining imports — deferred until after setup_logging() (see note above)
 # ============================================================
 
-from src.db.session import init_db
 from src.api.auth_routes import router as auth_router
 from src.api.routers.chat import router as chat_router
 from src.api.routers.conversations import router as conversations_router
-from src.api.routers.online_learning import router as online_learning_router
 from src.api.routers.exploit import router as exploit_router
-from src.api.state import online_learning_client, EVENTS_LOG_DIR
+from src.api.routers.online_learning import router as online_learning_router
+from src.api.state import EVENTS_LOG_DIR, online_learning_client
+from src.db.session import init_db
 from src.security.auth import ensure_jwt_secret_configured
 
 # ============================================================
@@ -79,10 +80,12 @@ from src.security.auth import ensure_jwt_secret_configured
 
 app = FastAPI(title="Security Assistant GPT (Lab)")
 
+
 @app.on_event("startup")
 def _create_tables_if_missing() -> None:
     init_db()
     ensure_jwt_secret_configured()
+
 
 origins = [
     "http://localhost:5173",
@@ -106,8 +109,9 @@ app.include_router(exploit_router)
 # Healthcheck
 # ============================================================
 
+
 @app.get("/health")
-async def health() -> Dict[str, Any]:
+async def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "online_learning_enabled": online_learning_client is not None,

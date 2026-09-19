@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.prompts.layers.models import (
     PromptLayerConfig,
@@ -16,14 +16,14 @@ def _sys(
     layer_id: str,
     *,
     order: int,
-    content_ref: Optional[str] = None,
-    content: Optional[str] = None,
-    condition: Optional[str] = None,
+    content_ref: str | None = None,
+    content: str | None = None,
+    condition: str | None = None,
     priority: int = 0,
     enabled: bool = True,
-    variables: Optional[Dict[str, Any]] = None,
+    variables: dict[str, Any] | None = None,
 ) -> PromptLayerConfig:
-    kwargs: Dict[str, Any] = {
+    kwargs: dict[str, Any] = {
         "id": layer_id,
         "role": PromptRole.SYSTEM,
         "order": order,
@@ -43,14 +43,14 @@ def build_secure_chat_stack(
     *,
     security_mode: bool = True,
     include_api_system: bool = False,
-    include_dark_recon: bool = False,   # kept for signature compat, no-op below
+    include_dark_recon: bool = False,  # kept for signature compat, no-op below
     include_api_user: bool = False,
     include_grok: bool = False,
     mode: PromptMode = PromptMode.MULTI,
     merge_same_role: bool = False,
     provider: str = "openai",
 ) -> PromptStackConfig:
-    layers: List[PromptLayerConfig] = [
+    layers: list[PromptLayerConfig] = [
         _sys("root", order=10, content_ref="root"),
         _sys("style", order=20, content_ref="style"),
         _sys("policy", order=30, content_ref="policy", priority=100),
@@ -104,11 +104,21 @@ def build_planner_stack(
 
     if with_evidence:
         layers.append(
-            _sys("planner_evidence", order=60, content="You must ground every step in the provided evidence.", priority=50)
+            _sys(
+                "planner_evidence",
+                order=60,
+                content="You must ground every step in the provided evidence.",
+                priority=50,
+            )
         )
     else:
         layers.append(
-            _sys("json_only", order=60, content="\nYou are a JSON-only assistant.", priority=50)
+            _sys(
+                "json_only",
+                order=60,
+                content="\nYou are a JSON-only assistant.",
+                priority=50,
+            )
         )
 
     return PromptStackConfig(
@@ -134,14 +144,14 @@ def build_prompt_stack_for_provider(
     with_evidence: bool = False,
 ) -> PromptStackConfig:
     """Factory function to build appropriate stack based on provider.
-    
+
     This is the recommended way to build stacks as it handles provider-specific
     configurations automatically.
     """
     # Auto-enable Grok for XAI provider
     if provider == "xai" and include_grok is None:
         include_grok = True
-    
+
     if stack_type == "planner":
         return build_planner_stack(
             with_evidence=with_evidence,
@@ -206,6 +216,6 @@ def build_secure_chat_stack_for_xai(
     )
 
 
-def stack_to_dict(stack: PromptStackConfig) -> Dict[str, Any]:
+def stack_to_dict(stack: PromptStackConfig) -> dict[str, Any]:
     """Serialize a stack for config dumps / debugging."""
     return stack.model_dump(mode="json")

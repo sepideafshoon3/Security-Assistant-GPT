@@ -16,7 +16,7 @@ const GREETINGS: Record<TimeBand, GreetingLine[]> = {
   ],
   evening: [
     { title: "Good evening", subtitle: "Wrapping up, or just getting started?" },
-    { title: "Evening", subtitle: "Prime time for \"just one more commit.\"" },
+    { title: "Evening", subtitle: 'Prime time for "just one more commit."' },
     { title: "Hey there", subtitle: "What's on the review queue tonight?" },
   ],
   night: [

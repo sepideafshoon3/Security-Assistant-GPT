@@ -20,16 +20,14 @@ import datetime
 import json
 import logging
 import os
+import threading as _threading
+import time as _time
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import time as _time
-import threading as _threading
-
-from src.search.local_web_search import web_search, WebResult
-from src.search.tools_search import search_web as tools_search_web, normalize_results
 from src.search.exploitdb_client import ExploitDBClient
+from src.search.local_web_search import WebResult, web_search
 from src.search.searchsploit_client import SearchsploitClient
 
 logger = logging.getLogger(__name__)
@@ -46,13 +44,19 @@ def _get_tool_jsonl_logger() -> logging.Logger:
     """
     try:
         from src.core.paths import BASE_DIR as _BASE_DIR
+
         log_dir_env = os.getenv("LLM_LOG_DIR")
-        log_dir = Path(log_dir_env).expanduser() if log_dir_env else (_BASE_DIR / "logs" / "llm")
+        log_dir = (
+            Path(log_dir_env).expanduser()
+            if log_dir_env
+            else (_BASE_DIR / "logs" / "llm")
+        )
         log_dir.mkdir(parents=True, exist_ok=True)
 
         _logger = logging.getLogger("mrrobot.tools")
         if not any(getattr(h, "log_dir", None) == log_dir for h in _logger.handlers):
             from src.llm.openai_client import DailyFileHandler
+
             h = DailyFileHandler(log_dir=log_dir, prefix="tools")
             h.setFormatter(logging.Formatter("%(message)s"))
             _logger.addHandler(h)
@@ -73,6 +77,7 @@ def _safe_serialize(obj: Any, max_len: int = 1_000_000) -> str:
         return text[:max_len] + "...[TRUNCATED]"
     return text
 
+
 # ======================================================================
 # Rate-limiter for search tools (prevents DDG blocks during tool loops)
 # ======================================================================
@@ -84,7 +89,7 @@ _SEARCH_MIN_INTERVAL = 3.0  # seconds between search calls
 # Tool schemas (OpenAI function-calling format)
 # ======================================================================
 
-TOOL_SCHEMAS: List[Dict[str, Any]] = [
+TOOL_SCHEMAS: list[dict[str, Any]] = [
     # ------------------------------------------------------------------
     # 1) Web Search (DuckDuckGo via ddgr / HTML fallback)
     # ------------------------------------------------------------------
@@ -288,7 +293,8 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
 # Tool handlers
 # ======================================================================
 
-def _rate_limited_search(query: str, max_results: int = 10) -> List[WebResult]:
+
+def _rate_limited_search(query: str, max_results: int = 10) -> list[WebResult]:
     """Execute web_search with rate limiting to avoid DDG blocks."""
     global _search_last_call
     with _search_rate_lock:
@@ -302,14 +308,14 @@ def _rate_limited_search(query: str, max_results: int = 10) -> List[WebResult]:
     return web_search(query, max_results=max_results)
 
 
-def _handle_web_search(args: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_web_search(args: dict[str, Any]) -> dict[str, Any]:
     query = str(args.get("query", "")).strip()
     max_results = int(args.get("max_results", 10))
     if not query:
         return {"error": "Empty query", "results": []}
 
     try:
-        results: List[WebResult] = _rate_limited_search(query, max_results)
+        results: list[WebResult] = _rate_limited_search(query, max_results)
         if not results:
             return {
                 "query": query,
@@ -324,8 +330,7 @@ def _handle_web_search(args: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "query": query,
             "results": [
-                {"title": r.title, "url": r.url, "snippet": r.snippet}
-                for r in results
+                {"title": r.title, "url": r.url, "snippet": r.snippet} for r in results
             ],
         }
     except Exception as e:
@@ -340,7 +345,7 @@ def _handle_web_search(args: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-def _handle_exploitdb_search(args: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_exploitdb_search(args: dict[str, Any]) -> dict[str, Any]:
     query = str(args.get("query", "")).strip()
     limit = int(args.get("limit", 5))
     if not query:
@@ -367,7 +372,7 @@ def _handle_exploitdb_search(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": str(e), "results": []}
 
 
-def _handle_searchsploit(args: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_searchsploit(args: dict[str, Any]) -> dict[str, Any]:
     query = str(args.get("query", "")).strip()
     limit = int(args.get("limit", 5))
     if not query:
@@ -394,9 +399,9 @@ def _handle_searchsploit(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": str(e), "results": []}
 
 
-def _handle_run_semgrep(args: Dict[str, Any]) -> Dict[str, Any]:
-    from src.tools.semgrep_runner import run_semgrep
+def _handle_run_semgrep(args: dict[str, Any]) -> dict[str, Any]:
     from src.core.paths import BASE_DIR
+    from src.tools.semgrep_runner import run_semgrep
 
     repo_path = str(args.get("repository_path", "")).strip()
     if not repo_path:
@@ -404,13 +409,13 @@ def _handle_run_semgrep(args: Dict[str, Any]) -> Dict[str, Any]:
 
     reports_dir = BASE_DIR / "reports"
     result = run_semgrep(repo_path, reports_dir)
-    output: Dict[str, Any] = {
+    output: dict[str, Any] = {
         "action": result.action,
         "success": result.success,
     }
     if result.output_path and os.path.exists(result.output_path):
         try:
-            with open(result.output_path, "r") as f:
+            with open(result.output_path) as f:
                 data = json.load(f)
             # Return a summary rather than the full giant JSON
             findings = data.get("results", [])
@@ -423,9 +428,9 @@ def _handle_run_semgrep(args: Dict[str, Any]) -> Dict[str, Any]:
     return output
 
 
-def _handle_run_bandit(args: Dict[str, Any]) -> Dict[str, Any]:
-    from src.tools.bandit_runner import run_bandit
+def _handle_run_bandit(args: dict[str, Any]) -> dict[str, Any]:
     from src.core.paths import BASE_DIR
+    from src.tools.bandit_runner import run_bandit
 
     repo_path = str(args.get("repository_path", "")).strip()
     if not repo_path:
@@ -433,13 +438,13 @@ def _handle_run_bandit(args: Dict[str, Any]) -> Dict[str, Any]:
 
     reports_dir = BASE_DIR / "reports"
     result = run_bandit(repo_path, reports_dir)
-    output: Dict[str, Any] = {
+    output: dict[str, Any] = {
         "action": result.action,
         "success": result.success,
     }
     if result.output_path and os.path.exists(result.output_path):
         try:
-            with open(result.output_path, "r") as f:
+            with open(result.output_path) as f:
                 data = json.load(f)
             findings = data.get("results", [])
             output["findings_count"] = len(findings)
@@ -451,9 +456,9 @@ def _handle_run_bandit(args: Dict[str, Any]) -> Dict[str, Any]:
     return output
 
 
-def _handle_run_osv_scanner(args: Dict[str, Any]) -> Dict[str, Any]:
-    from src.tools.osv_runner import run_osv_scanner
+def _handle_run_osv_scanner(args: dict[str, Any]) -> dict[str, Any]:
     from src.core.paths import BASE_DIR
+    from src.tools.osv_runner import run_osv_scanner
 
     repo_path = str(args.get("repository_path", "")).strip()
     if not repo_path:
@@ -461,13 +466,13 @@ def _handle_run_osv_scanner(args: Dict[str, Any]) -> Dict[str, Any]:
 
     reports_dir = BASE_DIR / "reports"
     result = run_osv_scanner(repo_path, reports_dir)
-    output: Dict[str, Any] = {
+    output: dict[str, Any] = {
         "action": result.action,
         "success": result.success,
     }
     if result.output_path and os.path.exists(result.output_path):
         try:
-            with open(result.output_path, "r") as f:
+            with open(result.output_path) as f:
                 data = json.load(f)
             output["scan_result"] = data
         except Exception:
@@ -477,15 +482,15 @@ def _handle_run_osv_scanner(args: Dict[str, Any]) -> Dict[str, Any]:
     return output
 
 
-def _handle_research_search(args: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_research_search(args: dict[str, Any]) -> dict[str, Any]:
     queries = args.get("queries", [])
     max_per = int(args.get("max_results_per_query", 5))
     if not queries:
         return {"error": "No queries provided", "results": []}
 
-    all_results: List[Dict[str, Any]] = []
+    all_results: list[dict[str, Any]] = []
     seen_urls: set = set()
-    errors: List[str] = []
+    errors: list[str] = []
 
     for idx, q in enumerate(queries):
         q = str(q).strip()
@@ -497,17 +502,19 @@ def _handle_research_search(args: Dict[str, Any]) -> Dict[str, Any]:
                 if r.url in seen_urls:
                     continue
                 seen_urls.add(r.url)
-                all_results.append({
-                    "query": q,
-                    "title": r.title,
-                    "url": r.url,
-                    "snippet": r.snippet,
-                })
+                all_results.append(
+                    {
+                        "query": q,
+                        "title": r.title,
+                        "url": r.url,
+                        "snippet": r.snippet,
+                    }
+                )
         except Exception as e:
             logger.warning("research_search query '%s' failed: %r", q, e)
             errors.append(f"Query '{q}': {e}")
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "queries_executed": len(queries),
         "total_results": len(all_results),
         "results": all_results,
@@ -527,7 +534,7 @@ def _handle_research_search(args: Dict[str, Any]) -> Dict[str, Any]:
 # Dispatch table
 # ======================================================================
 
-_DISPATCH: Dict[str, Any] = {
+_DISPATCH: dict[str, Any] = {
     "web_search": _handle_web_search,
     "exploitdb_search": _handle_exploitdb_search,
     "searchsploit": _handle_searchsploit,
@@ -542,7 +549,8 @@ _DISPATCH: Dict[str, Any] = {
 # Public API
 # ======================================================================
 
-def get_all_tool_schemas(*, api: str = "chat") -> List[Dict[str, Any]]:
+
+def get_all_tool_schemas(*, api: str = "chat") -> list[dict[str, Any]]:
     """Return all tool schemas for passing to the OpenAI API.
 
     Args:
@@ -555,7 +563,7 @@ def get_all_tool_schemas(*, api: str = "chat") -> List[Dict[str, Any]]:
     return list(TOOL_SCHEMAS)
 
 
-def _to_responses_format(schemas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _to_responses_format(schemas: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert Chat Completions tool schemas to Responses API format.
 
     Chat Completions:
@@ -564,11 +572,11 @@ def _to_responses_format(schemas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Responses API:
         {"type": "function", "name": ..., "description": ..., "parameters": ...}
     """
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for s in schemas:
         if s.get("type") == "function" and "function" in s:
             fn = s["function"]
-            flat: Dict[str, Any] = {"type": "function"}
+            flat: dict[str, Any] = {"type": "function"}
             flat["name"] = fn.get("name", "")
             flat["description"] = fn.get("description", "")
             if "parameters" in fn:
@@ -582,12 +590,12 @@ def _to_responses_format(schemas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
-def get_tool_names() -> List[str]:
+def get_tool_names() -> list[str]:
     """Return the names of all registered tools."""
     return list(_DISPATCH.keys())
 
 
-def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+def dispatch_tool_call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Execute a tool by name with the given arguments.
     Returns a JSON-serialisable dict with the tool output.
@@ -606,27 +614,44 @@ def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     handler = _DISPATCH.get(name)
     if handler is None:
         logger.error("Unknown tool requested: %s", name)
-        _emit_tool_event(tool_log, "tool_call_error", name, arguments,
-                         error=f"Unknown tool: {name}",
-                         ts_start=ts_start, elapsed_ms=0)
+        _emit_tool_event(
+            tool_log,
+            "tool_call_error",
+            name,
+            arguments,
+            error=f"Unknown tool: {name}",
+            ts_start=ts_start,
+            elapsed_ms=0,
+        )
         return {"error": f"Unknown tool: {name}"}
 
     # ── Log start ──
     logger.info("Tool call START: %s | args=%s", name, _safe_serialize(arguments, 2000))
-    _emit_tool_event(tool_log, "tool_call_start", name, arguments,
-                     ts_start=ts_start, elapsed_ms=0)
+    _emit_tool_event(
+        tool_log, "tool_call_start", name, arguments, ts_start=ts_start, elapsed_ms=0
+    )
 
     try:
         result = handler(arguments)
         elapsed_ms = round((_time.monotonic() - t0) * 1000, 2)
 
-        logger.info("Tool call END:   %s | %dms | result_keys=%s",
-                     name, elapsed_ms,
-                     list(result.keys()) if isinstance(result, dict) else type(result).__name__)
+        logger.info(
+            "Tool call END:   %s | %dms | result_keys=%s",
+            name,
+            elapsed_ms,
+            list(result.keys()) if isinstance(result, dict) else type(result).__name__,
+        )
 
         # ── Log full result ──
-        _emit_tool_event(tool_log, "tool_call_end", name, arguments,
-                         result=result, ts_start=ts_start, elapsed_ms=elapsed_ms)
+        _emit_tool_event(
+            tool_log,
+            "tool_call_end",
+            name,
+            arguments,
+            result=result,
+            ts_start=ts_start,
+            elapsed_ms=elapsed_ms,
+        )
         return result
 
     except Exception as e:
@@ -634,9 +659,16 @@ def dispatch_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         tb = traceback.format_exc()
         logger.error("Tool call FAIL:  %s | %dms | error=%r", name, elapsed_ms, e)
 
-        _emit_tool_event(tool_log, "tool_call_error", name, arguments,
-                         error=str(e), traceback_str=tb,
-                         ts_start=ts_start, elapsed_ms=elapsed_ms)
+        _emit_tool_event(
+            tool_log,
+            "tool_call_error",
+            name,
+            arguments,
+            error=str(e),
+            traceback_str=tb,
+            ts_start=ts_start,
+            elapsed_ms=elapsed_ms,
+        )
         return {"error": f"Tool {name} failed: {e}"}
 
 
@@ -644,18 +676,20 @@ def _emit_tool_event(
     tool_log: logging.Logger,
     event: str,
     name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     *,
     result: Any = None,
-    error: Optional[str] = None,
-    traceback_str: Optional[str] = None,
-    ts_start: Optional[datetime.datetime] = None,
+    error: str | None = None,
+    traceback_str: str | None = None,
+    ts_start: datetime.datetime | None = None,
     elapsed_ms: float = 0,
 ) -> None:
     """Write a structured JSONL line for a tool event."""
     try:
-        entry: Dict[str, Any] = {
-            "ts": (ts_start or datetime.datetime.now()).isoformat(timespec="milliseconds"),
+        entry: dict[str, Any] = {
+            "ts": (ts_start or datetime.datetime.now()).isoformat(
+                timespec="milliseconds"
+            ),
             "event": event,
             "tool": name,
             "args": arguments,

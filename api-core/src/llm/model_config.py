@@ -21,7 +21,6 @@ entire api-core stack can be reconfigured via .env without code changes.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 # Fallback defaults used only when env vars are unset.
 _FALLBACK_CHAT_MODEL = "openai/gpt-oss-120b"
@@ -46,7 +45,7 @@ def get_embedding_model() -> str:
     ).strip()
 
 
-def get_provider(model: Optional[str] = None) -> str:
+def get_provider(model: str | None = None) -> str:
     """Return ``openai`` or ``xai`` for *model* (or the configured chat model).
 
     Delegates to :func:`src.llm.router.detect_provider` so heuristics stay in

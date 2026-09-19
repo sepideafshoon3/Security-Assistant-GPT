@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from jinja2 import (
     BaseLoader,
@@ -11,8 +12,7 @@ from jinja2 import (
     StrictUndefined,
     TemplateSyntaxError,
     Undefined,
-    UndefinedError,
-    meta,  # <-- ADDED: For analyzing template syntax
+    UndefinedError,  # <-- ADDED: For analyzing template syntax
 )
 from jinja2.sandbox import SandboxedEnvironment  # <-- FIXED IMPORT
 
@@ -53,23 +53,23 @@ class PromptRenderer:
     def render(
         self,
         template_source: str,
-        variables: Optional[Mapping[str, Any]] = None,
+        variables: Mapping[str, Any] | None = None,
         *,
-        layer_id: Optional[str] = None,
+        layer_id: str | None = None,
     ) -> str:
         """Render a template string with the given variables.
 
         All string variables are automatically sanitized to prevent
         template injection attacks.
         """
-        vars_dict: Dict[str, Any] = dict(variables or {})
-        
+        vars_dict: dict[str, Any] = dict(variables or {})
+
         # Sanitize all string variables to prevent template injection
         vars_dict = self._sanitize_variables(vars_dict)
-        
+
         # Additional validation: check for dangerous template patterns
         self._validate_template_safety(template_source)
-        
+
         try:
             template = self._env.from_string(template_source)
             return template.render(**vars_dict)
@@ -92,9 +92,9 @@ class PromptRenderer:
     def eval_condition(
         self,
         expression: str,
-        context: Optional[Mapping[str, Any]] = None,
+        context: Mapping[str, Any] | None = None,
         *,
-        layer_id: Optional[str] = None,
+        layer_id: str | None = None,
     ) -> bool:
         """Evaluate a Jinja2 boolean expression against *context*.
 
@@ -134,15 +134,15 @@ class PromptRenderer:
 
         return _truthy(raw)
 
-    def _sanitize_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_variables(self, variables: dict[str, Any]) -> dict[str, Any]:
         """Sanitize variables to prevent template injection.
-        
+
         This escapes Jinja2 template syntax in string values while preserving
         non-string types (bool, int, float, None) for condition evaluation.
-        
+
         Args:
             variables: Dictionary of variables to sanitize
-            
+
         Returns:
             Sanitized dictionary with all string values escaped
         """
@@ -157,34 +157,34 @@ class PromptRenderer:
 
     def _escape_template_syntax(self, value: str) -> str:
         """Escape Jinja2 template delimiters to prevent injection.
-        
+
         Converts:
         - {{ }} -> {{"{{"}} {{"}}"}}
         - {% %} -> {{"{%"}} {{"%}"}}
         - {# #} -> {{"{#"}} {{"#}"}}
-        
+
         This ensures user input is treated as literal text, not template code.
-        
+
         Args:
             value: String to escape
-            
+
         Returns:
             Escaped string safe for template rendering
         """
         if not value:
             return value
-        
+
         # Escape in order to avoid double-escaping
         # Using an approach that renders the delimiters as literal strings
         replacements = [
-            ('{{', '{{"{{"}}'),
-            ('}}', '{{"}}"}}'),
-            ('{%', '{{"{%"}}'),
-            ('%}', '{{"%}"}}'),
-            ('{#', '{{"{#"}}'),
-            ('#}', '{{"#}"}}'),
+            ("{{", '{{"{{"}}'),
+            ("}}", '{{"}}"}}'),
+            ("{%", '{{"{%"}}'),
+            ("%}", '{{"%}"}}'),
+            ("{#", '{{"{#"}}'),
+            ("#}", '{{"#}"}}'),
         ]
-        
+
         result = value
         for old, new in replacements:
             result = result.replace(old, new)
@@ -192,31 +192,32 @@ class PromptRenderer:
 
     def _validate_template_safety(self, template_source: str) -> None:
         """Validate template for dangerous patterns.
-        
+
         This is an additional defense layer that checks for potential
         template injection attempts.
         """
         # Check for known dangerous patterns
         dangerous_patterns = [
-            r'__class__',
-            r'__mro__',
-            r'__subclasses__',
-            r'__builtins__',
-            r'__import__',
-            r'eval\(',
-            r'exec\(',
-            r'compile\(',
-            r'getattr\(',
-            r'setattr\(',
+            r"__class__",
+            r"__mro__",
+            r"__subclasses__",
+            r"__builtins__",
+            r"__import__",
+            r"eval\(",
+            r"exec\(",
+            r"compile\(",
+            r"getattr\(",
+            r"setattr\(",
         ]
-        
+
         for pattern in dangerous_patterns:
             if re.search(pattern, template_source, re.IGNORECASE):
                 # Log warning but don't block - SandboxedEnvironment should handle it
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Potential dangerous pattern in template: {pattern}")
-        
+
         # Parse template to see what variables/functions are used
         try:
             parsed = self._env.parse(template_source)
@@ -225,22 +226,24 @@ class PromptRenderer:
         except Exception:
             pass  # Let the rendering handle it
 
-    def _validate_condition_safety(self, expression: str, layer_id: Optional[str] = None) -> None:
+    def _validate_condition_safety(
+        self, expression: str, layer_id: str | None = None
+    ) -> None:
         """Validate condition expression for safety."""
         # Check for dangerous patterns in conditions
         dangerous_patterns = [
-            r'__class__',
-            r'__mro__',
-            r'__subclasses__',
-            r'__builtins__',
-            r'__import__',
-            r'eval\(',
-            r'exec\(',
-            r'compile\(',
-            r'getattr\(',
-            r'setattr\(',
+            r"__class__",
+            r"__mro__",
+            r"__subclasses__",
+            r"__builtins__",
+            r"__import__",
+            r"eval\(",
+            r"exec\(",
+            r"compile\(",
+            r"getattr\(",
+            r"setattr\(",
         ]
-        
+
         for pattern in dangerous_patterns:
             if re.search(pattern, expression, re.IGNORECASE):
                 raise LayerConditionError(

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 import yaml
 
@@ -9,8 +9,8 @@ class PolicyEngine:
         self.policy_dir = policy_dir
         self.policies = self._load_policies()
 
-    def _load_policies(self) -> Dict[str, Any]:
-        policies: Dict[str, Any] = {}
+    def _load_policies(self) -> dict[str, Any]:
+        policies: dict[str, Any] = {}
         for file in self.policy_dir.glob("*.yaml"):
             with file.open() as f:
                 policies[file.stem] = yaml.safe_load(f) or {}

@@ -1,10 +1,6 @@
 import { AlertTriangle, ShieldAlert, Wrench } from "lucide-react";
 import { cn } from "../ui/utils";
-import {
-  extractFindings,
-  hasNotableFindings,
-  type Severity,
-} from "../../utils/findings";
+import { extractFindings, hasNotableFindings, type Severity } from "../../utils/findings";
 
 const SEVERITY_META: Record<
   Exclude<Severity, "clean">,
@@ -13,14 +9,12 @@ const SEVERITY_META: Record<
   critical: {
     icon: ShieldAlert,
     label: "Critical finding",
-    className:
-      "bg-status-danger/10 text-status-danger-strong border-status-danger/30",
+    className: "bg-status-danger/10 text-status-danger-strong border-status-danger/30",
   },
   findings: {
     icon: AlertTriangle,
     label: "Has findings",
-    className:
-      "bg-status-warning/10 text-status-warning border-status-warning/30",
+    className: "bg-status-warning/10 text-status-warning border-status-warning/30",
   },
 };
 
@@ -32,8 +26,7 @@ export function FindingsBadge({ text }: FindingsBadgeProps) {
   const findings = extractFindings(text);
   if (!hasNotableFindings(findings)) return null;
 
-  const severityMeta =
-    findings.severity !== "clean" ? SEVERITY_META[findings.severity] : null;
+  const severityMeta = findings.severity !== "clean" ? SEVERITY_META[findings.severity] : null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 mb-1.5 px-1">

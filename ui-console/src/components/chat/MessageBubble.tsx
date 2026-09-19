@@ -43,25 +43,19 @@ export function MessageBubble({
           message.failed && "ring-2 ring-status-danger/60",
         )}
       >
-        <span className="sr-only">
-          {isUser ? "You said: " : "Assistant said: "}
-        </span>
+        <span className="sr-only">{isUser ? "You said: " : "Assistant said: "}</span>
         <MessageContent text={message.text} />
       </div>
 
       {message.failed && (
         <div className="flex items-center gap-1.5 mt-1 px-1">
           <AlertCircle className="w-3.5 h-3.5 text-status-danger-strong" aria-hidden />
-          <span className="text-xs text-status-danger-strong">
-            Failed to send — hover to retry
-          </span>
+          <span className="text-xs text-status-danger-strong">Failed to send — hover to retry</span>
         </div>
       )}
 
       <div className="flex items-center gap-3 h-0 group-hover:h-5 group-focus-within:h-5 overflow-hidden transition-all duration-150 mt-1 px-1">
-        <span className="text-xs text-fg-faint">
-          {formatRelativeTime(message.timestamp)}
-        </span>
+        <span className="text-xs text-fg-faint">{formatRelativeTime(message.timestamp)}</span>
         {isUser && (
           <IconButton
             aria-label="Resend message"
@@ -80,10 +74,7 @@ export function MessageBubble({
             <Pencil className="w-3.5 h-3.5" aria-hidden />
           </IconButton>
         )}
-        <IconButton
-          aria-label="Copy message"
-          onClick={() => onCopy(message.id, message.text)}
-        >
+        <IconButton aria-label="Copy message" onClick={() => onCopy(message.id, message.text)}>
           {isCopied ? (
             <Check className="w-3.5 h-3.5" aria-hidden />
           ) : (

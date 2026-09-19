@@ -104,18 +104,13 @@ export function ConversationList({
     setRenameValue("");
   };
 
-  const pendingDeleteConversation = conversations.find(
-    (c) => c.id === pendingDeleteId,
-  );
+  const pendingDeleteConversation = conversations.find((c) => c.id === pendingDeleteId);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return conversations
       .filter(
-        (c) =>
-          !q ||
-          c.title.toLowerCase().includes(q) ||
-          c.lastMessage.toLowerCase().includes(q),
+        (c) => !q || c.title.toLowerCase().includes(q) || c.lastMessage.toLowerCase().includes(q),
       )
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [conversations, query]);
@@ -167,19 +162,14 @@ export function ConversationList({
                 "fixed top-16 bottom-0 left-0 z-30 w-[85vw] max-w-80 border-r shadow-2xl shadow-black/40",
                 isOpen ? "translate-x-0" : "-translate-x-full",
               )
-            : cn(
-                "flex-shrink-0 relative",
-                isOpen ? "w-80 border-r" : "w-0 border-r-0",
-              ),
+            : cn("flex-shrink-0 relative", isOpen ? "w-80 border-r" : "w-0 border-r-0"),
         )}
       >
         <div className="w-[85vw] max-w-80 md:w-80 h-full flex flex-col">
           {/* New chat + search */}
           <div className="p-4 border-b border-border space-y-3">
             <div className="flex items-center justify-between gap-2 md:hidden">
-              <span className="text-sm text-fg-secondary font-medium">
-                Conversations
-              </span>
+              <span className="text-sm text-fg-secondary font-medium">Conversations</span>
               <button
                 onClick={onClose}
                 aria-label="Close sidebar"
@@ -208,11 +198,7 @@ export function ConversationList({
           </div>
 
           {/* Conversations */}
-          <div
-            className="flex-1 overflow-y-auto"
-            role="list"
-            aria-label="Conversation list"
-          >
+          <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversation list">
             {isLoadingConversations ? (
               <div className="p-4 space-y-3" aria-hidden>
                 {[0, 1, 2, 3].map((i) => (
@@ -231,11 +217,8 @@ export function ConversationList({
             ) : (
               filtered.map((conversation) => {
                 const status = STATUS_STYLES[conversation.status ?? "clean"];
-                const isSelected =
-                  selectedConversationId === conversation.id;
-                const isActive = processingConversationIds.has(
-                  conversation.id,
-                );
+                const isSelected = selectedConversationId === conversation.id;
+                const isActive = processingConversationIds.has(conversation.id);
                 const isRenaming = renamingId === conversation.id;
                 return (
                   <div
@@ -349,11 +332,7 @@ export function ConversationList({
             </div>
             <button
               onClick={toggleTheme}
-              aria-label={
-                theme === "dark"
-                  ? "Switch to light mode"
-                  : "Switch to dark mode"
-              }
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
               className="relative w-8 h-8 text-fg-tertiary hover:text-fg-primary transition-colors hover:bg-secondary rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover"
             >
               <Sun
@@ -411,9 +390,7 @@ export function ConversationList({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (pendingDeleteId) onDeleteConversation(pendingDeleteId);

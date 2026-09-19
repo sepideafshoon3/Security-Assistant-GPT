@@ -3,8 +3,7 @@ import { useState } from "react";
 
 // یک بلاک می‌تونه متن معمولی باشه یا کد
 type Block =
-  | { type: "text"; content: string }
-  | { type: "code"; content: string; language?: string };
+  { type: "text"; content: string } | { type: "code"; content: string; language?: string };
 
 interface MessageContentProps {
   text: string;
@@ -105,54 +104,53 @@ export function MessageContent({ text }: MessageContentProps) {
     }
   };
 
-function markdownToText(text: string): string {
-  return text
-    // headings: ### Title -> Title
-    .replace(/^#{1,6}\s+/gm, "")
+  function markdownToText(text: string): string {
+    return (
+      text
+        // headings: ### Title -> Title
+        .replace(/^#{1,6}\s+/gm, "")
 
-    // images: ![alt](url) -> alt   (must run BEFORE the link regex, which
-    // is a subset pattern and would otherwise leave a stray "!")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+        // images: ![alt](url) -> alt   (must run BEFORE the link regex, which
+        // is a subset pattern and would otherwise leave a stray "!")
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
 
-    // links: [Google](https://google.com) -> Google
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        // links: [Google](https://google.com) -> Google
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
 
-    // bold / italic
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/\*(.*?)\*/g, "$1")
-    // italic underscores: only strip when NOT touching a word character,
-    // so snake_case / my_var_name / __init__.py survive untouched
-    .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, "$1")
+        // bold / italic
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/__(.*?)__/g, "$1")
+        .replace(/\*(.*?)\*/g, "$1")
+        // italic underscores: only strip when NOT touching a word character,
+        // so snake_case / my_var_name / __init__.py survive untouched
+        .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, "$1")
 
-    // strikethrough: ~~text~~ -> text
-    .replace(/~~(.*?)~~/g, "$1")
+        // strikethrough: ~~text~~ -> text
+        .replace(/~~(.*?)~~/g, "$1")
 
-    // inline code: `hello` -> hello
-    .replace(/`([^`]+)`/g, "$1")
+        // inline code: `hello` -> hello
+        .replace(/`([^`]+)`/g, "$1")
 
-    // unordered lists: - item / * item -> item
-    .replace(/^\s*[-*+]\s+/gm, "")
+        // unordered lists: - item / * item -> item
+        .replace(/^\s*[-*+]\s+/gm, "")
 
-    // numbered lists: 1. item -> item
-    .replace(/^\s*\d+\.\s+/gm, "")
+        // numbered lists: 1. item -> item
+        .replace(/^\s*\d+\.\s+/gm, "")
 
-    // blockquote: > text -> text
-    .replace(/^\s*>\s?/gm, "")
+        // blockquote: > text -> text
+        .replace(/^\s*>\s?/gm, "")
 
-    // horizontal rules (---, ***, ___, or mixes of 3+)
-    .replace(/^\s*([-*_])\1{2,}\s*$/gm, "");
-}
+        // horizontal rules (---, ***, ___, or mixes of 3+)
+        .replace(/^\s*([-*_])\1{2,}\s*$/gm, "")
+    );
+  }
 
   return (
     <div className="space-y-3">
       {blocks.map((block, index) => {
         if (block.type === "text") {
           return (
-            <p
-              key={index}
-              className="whitespace-pre-wrap break-words leading-relaxed"
-            >
+            <p key={index} className="whitespace-pre-wrap break-words leading-relaxed">
               {markdownToText(block.content)}
             </p>
           );
@@ -166,9 +164,7 @@ function markdownToText(text: string): string {
           >
             {/* هدر کد (زبان + دکمه کپی) */}
             <div className="flex items-center justify-between px-3 py-2 text-xs bg-black/60 border-b border-white/10">
-              <span className="font-mono text-brand-cyan/80">
-                {block.language || "code"}
-              </span>
+              <span className="font-mono text-brand-cyan/80">{block.language || "code"}</span>
               <button
                 type="button"
                 onClick={() => handleCopy(block.content, index)}
@@ -180,9 +176,7 @@ function markdownToText(text: string): string {
 
             {/* خود کد */}
             <pre className="max-h-[460px] overflow-auto p-3 text-xs md:text-sm bg-gradient-to-br from-surface-deep via-surface-panel to-surface-deep">
-              <code className="font-mono text-cyan-100 whitespace-pre">
-                {block.content}
-              </code>
+              <code className="font-mono text-cyan-100 whitespace-pre">{block.content}</code>
             </pre>
           </div>
         );

@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Mapping, MutableMapping, Optional
+import logging
+from collections.abc import Iterable, Mapping, MutableMapping
 
 from src.prompts.layers.errors import LayerRegistryError
-import logging
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
+
 class ContentRegistry:
     """Maps stable string keys to prompt bodies (static strings or callables)."""
 
-    def __init__(self, initial: Optional[Mapping[str, str]] = None) -> None:
+    def __init__(self, initial: Mapping[str, str] | None = None) -> None:
         self._items: MutableMapping[str, str] = {}
         if initial:
             for key, value in initial.items():
@@ -44,7 +45,7 @@ class ContentRegistry:
         for key, content in mapping.items():
             self.register(key, content, overwrite=overwrite)
 
-    def get(self, key: str, *, layer_id: Optional[str] = None) -> str:
+    def get(self, key: str, *, layer_id: str | None = None) -> str:
         cleaned = (key or "").strip()
         if not cleaned:
             raise LayerRegistryError(
@@ -68,7 +69,7 @@ class ContentRegistry:
     def keys(self) -> Iterable[str]:
         return sorted(self._items.keys())
 
-    def as_dict(self) -> Dict[str, str]:
+    def as_dict(self) -> dict[str, str]:
         return dict(self._items)
 
     def __contains__(self, key: object) -> bool:
@@ -141,20 +142,22 @@ def build_default_registry() -> ContentRegistry:
 def build_registry_for_provider(provider: str) -> ContentRegistry:
     """Return the content registry for ``openai`` or ``xai``."""
     cleaned = (provider or "openai").strip().lower()
-    logger.info(f"Building registry for provider: {provider!r} (normalized to: {cleaned})")
-    
+    logger.info(
+        f"Building registry for provider: {provider!r} (normalized to: {cleaned})"
+    )
+
     if cleaned in {"xai", "x", "x-ai"}:
         logger.debug("Using XAI registry")
         registry = build_xai_registry()
         logger.info("XAI registry built successfully")
         return registry
-    
+
     if cleaned in {"openai", "oai"}:
         logger.debug("Using OpenAI registry")
         registry = build_openai_registry()
         logger.info("OpenAI registry built successfully")
         return registry
-    
+
     error_msg = f"unknown prompt provider: {provider!r} (expected 'openai' or 'xai')"
     logger.error(error_msg)
     raise ValueError(error_msg)

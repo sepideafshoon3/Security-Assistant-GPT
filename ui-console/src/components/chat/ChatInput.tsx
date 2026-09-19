@@ -32,9 +32,7 @@ export function ChatInput({
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [pendingAttachments, setPendingAttachments] = useState<
-    PendingAttachment[]
-  >([]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
 
   useEffect(() => {
     if (!isAttachMenuOpen) return;
@@ -79,9 +77,7 @@ export function ChatInput({
     const next: PendingAttachment[] = Array.from(files).map((file) => ({
       id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       file,
-      previewUrl: file.type.startsWith("image/")
-        ? URL.createObjectURL(file)
-        : undefined,
+      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
     }));
     setPendingAttachments((prev) => [...prev, ...next]);
   };
@@ -211,9 +207,7 @@ export function ChatInput({
         </button>
       </form>
       {showHint && (
-        <p className="mt-2 text-xs text-center text-fg-faint">
-          Shift+Enter for a new line
-        </p>
+        <p className="mt-2 text-xs text-center text-fg-faint">Shift+Enter for a new line</p>
       )}
     </div>
   );

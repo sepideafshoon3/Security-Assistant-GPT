@@ -19,8 +19,7 @@ export function getFriendlyErrorMessage(err: unknown): string {
   return "Something went wrong.";
 }
 
-export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem("sa_access_token");
@@ -29,7 +28,7 @@ function authHeaders(): Record<string, string> {
 
 export async function sendMessageToBackend(
   conversationId: string | null,
-  text: string
+  text: string,
 ): Promise<BackendChatResponse> {
   const payload = {
     conversation_id: conversationId,
@@ -44,9 +43,7 @@ export async function sendMessageToBackend(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(
-      `Chat request failed (${res.status}): ${body.slice(0, 200)}`
-    );
+    throw new Error(`Chat request failed (${res.status}): ${body.slice(0, 200)}`);
   }
 
   return res.json();
@@ -77,16 +74,14 @@ export async function fetchConversations(): Promise<BackendConversationSummary[]
   const text = await res.text();
 
   if (!res.ok) {
-    throw new Error(
-      `Failed to load conversations (${res.status}): ${text.slice(0, 200)}`
-    );
+    throw new Error(`Failed to load conversations (${res.status}): ${text.slice(0, 200)}`);
   }
 
   try {
     const data = JSON.parse(text);
     return (data?.conversations as BackendConversationSummary[]) ?? [];
   } catch (err) {
-    console.error("[fetchConversations] Non-JSON response:", text.slice(0, 500));
+    console.error("[fetchConversations] Non-JSON response:", text.slice(0, 500), err);
     throw new Error("Invalid JSON from /conversations");
   }
 }
@@ -99,15 +94,13 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(
-      `Failed to delete conversation (${res.status}): ${body.slice(0, 200)}`
-    );
+    throw new Error(`Failed to delete conversation (${res.status}): ${body.slice(0, 200)}`);
   }
 }
 
 export async function renameConversation(
   conversationId: string,
-  title: string
+  title: string,
 ): Promise<{ conversation_id: string; theme: string; last_updated?: string }> {
   const res = await fetch(`${API_BASE}/conversations/${conversationId}`, {
     method: "PATCH",
@@ -117,9 +110,7 @@ export async function renameConversation(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(
-      `Failed to rename conversation (${res.status}): ${body.slice(0, 200)}`
-    );
+    throw new Error(`Failed to rename conversation (${res.status}): ${body.slice(0, 200)}`);
   }
 
   return res.json();

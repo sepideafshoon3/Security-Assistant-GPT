@@ -203,10 +203,7 @@ export function ChatArea({
         >
           {!hasStarted && <Greeting />}
 
-          <div
-            ref={inputWrapperRef}
-            className="w-full max-w-2xl pointer-events-auto"
-          >
+          <div ref={inputWrapperRef} className="w-full max-w-2xl pointer-events-auto">
             <ChatInput
               value={inputValue}
               onChange={setInputValue}

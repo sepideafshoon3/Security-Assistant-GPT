@@ -32,6 +32,8 @@ dev = [
     "pytest-asyncio",
     "mypy",
     "ruff",
+    "black",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]
@@ -39,3 +41,17 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length is Black's job, not Ruff's
+    "B008",  # Depends(...)/Body(...) as default args is the correct FastAPI pattern
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]

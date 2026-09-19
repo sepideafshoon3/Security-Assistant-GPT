@@ -1,5 +1,4 @@
-from typing import List
-from src.core.models import Task, Plan, PlannedAction
+from src.core.models import Plan, PlannedAction, Task
 
 
 class Planner:
@@ -8,7 +7,7 @@ class Planner:
     """
 
     def create_plan(self, task: Task) -> Plan:
-        actions: List[PlannedAction] = []
+        actions: list[PlannedAction] = []
 
         # Very simple, deterministic planning
         actions.append(

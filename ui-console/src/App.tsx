@@ -38,9 +38,7 @@ function deriveStatus(text: string): Conversation["status"] {
   return deriveSeverity(text);
 }
 
-function mapBackendConversationToConversation(
-  summary: BackendConversationSummary,
-): Conversation {
+function mapBackendConversationToConversation(summary: BackendConversationSummary): Conversation {
   const fallbackTs = summary.last_updated ? new Date(summary.last_updated) : new Date();
 
   const messages: Message[] = (summary.last_messages || []).map((m, index) => ({
@@ -50,8 +48,7 @@ function mapBackendConversationToConversation(
     timestamp: m.created_at ? new Date(m.created_at) : fallbackTs,
   }));
 
-  const lastMessageText =
-    messages[messages.length - 1]?.text || "No messages yet";
+  const lastMessageText = messages[messages.length - 1]?.text || "No messages yet";
 
   return {
     id: summary.conversation_id,
@@ -66,11 +63,7 @@ function mapBackendConversationToConversation(
 function mapBackendToMessages(resp: BackendChatResponse): Message[] {
   const now = Date.now();
 
-  if (
-    resp.messages &&
-    Array.isArray(resp.messages) &&
-    resp.messages.length > 0
-  ) {
+  if (resp.messages && Array.isArray(resp.messages) && resp.messages.length > 0) {
     return resp.messages.map((m, index) => ({
       id: `m-${now}-${index}`,
       text: m.content,
@@ -107,8 +100,7 @@ export default function App() {
 
   // Keep the sidebar's open/closed default sensible as the viewport crosses
   // the mobile breakpoint (e.g. rotating a tablet, resizing a window).
-  const [hasAdjustedForBreakpoint, setHasAdjustedForBreakpoint] =
-    useState(false);
+  const [hasAdjustedForBreakpoint, setHasAdjustedForBreakpoint] = useState(false);
   useEffect(() => {
     if (hasAdjustedForBreakpoint) return;
     setIsSidebarOpen(!isMobile);
@@ -116,18 +108,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<
-    string | null
-  >(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorRetry, setErrorRetry] = useState<(() => void) | null>(null);
-  const selectedConversation = conversations.find(
-    (c) => c.id === selectedConversationId,
+  const selectedConversation = conversations.find((c) => c.id === selectedConversationId);
+  const [processingConversationIds, setProcessingConversationIds] = useState<Set<string>>(
+    new Set(),
   );
-  const [processingConversationIds, setProcessingConversationIds] = useState<
-    Set<string>
-  >(new Set());
 
   const markProcessing = (id: string) =>
     setProcessingConversationIds((prev) => new Set(prev).add(id));
@@ -158,7 +146,7 @@ export default function App() {
         if (mapped.length > 0) {
           setSelectedConversationId(mapped[0].id);
         }
-      } catch (e: any) {
+      } catch (e) {
         console.error(e);
         setError(getFriendlyErrorMessage(e));
         setErrorRetry(() => load);
@@ -187,7 +175,7 @@ export default function App() {
 
     try {
       await deleteConversation(conversationId);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
       setConversations(previous);
       if (selectedConversationId === conversationId) {
@@ -208,7 +196,7 @@ export default function App() {
 
     try {
       await renameConversation(conversationId, trimmed);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
       setConversations(previous);
       setError(getFriendlyErrorMessage(e));
@@ -256,11 +244,8 @@ export default function App() {
         const resp = await sendMessageToBackend(null, trimmed);
 
         const backendMessages = mapBackendToMessages(resp);
-        const assistantMessages = backendMessages.filter(
-          (m) => m.sender === "contact",
-        );
-        const lastAssistantText =
-          assistantMessages[assistantMessages.length - 1]?.text || trimmed;
+        const assistantMessages = backendMessages.filter((m) => m.sender === "contact");
+        const lastAssistantText = assistantMessages[assistantMessages.length - 1]?.text || trimmed;
 
         const finalConv: Conversation = {
           id: resp.conversation_id,
@@ -275,7 +260,7 @@ export default function App() {
           return [...others, finalConv];
         });
         setSelectedConversationId(resp.conversation_id);
-      } catch (e: any) {
+      } catch (e) {
         console.error(e);
         const friendly = getFriendlyErrorMessage(e);
         setError(friendly);
@@ -319,12 +304,9 @@ export default function App() {
       const resp = await sendMessageToBackend(current.id, trimmed);
 
       const backendMessages = mapBackendToMessages(resp);
-      const assistantMessages = backendMessages.filter(
-        (m) => m.sender === "contact",
-      );
+      const assistantMessages = backendMessages.filter((m) => m.sender === "contact");
       const lastAssistantText =
-        assistantMessages[assistantMessages.length - 1]?.text ||
-        current.lastMessage;
+        assistantMessages[assistantMessages.length - 1]?.text || current.lastMessage;
 
       setConversations((prev) =>
         prev.map((conv) =>
@@ -340,7 +322,7 @@ export default function App() {
         ),
       );
       setSelectedConversationId(resp.conversation_id);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
       const friendly = getFriendlyErrorMessage(e);
       setError(friendly);
@@ -376,9 +358,7 @@ export default function App() {
 
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === conv.id
-          ? { ...c, messages: c.messages.filter((m) => m.id !== messageId) }
-          : c,
+        c.id === conv.id ? { ...c, messages: c.messages.filter((m) => m.id !== messageId) } : c,
       ),
     );
 
@@ -397,7 +377,6 @@ export default function App() {
   // and the login modal overlays it (see bottom of the JSX). This is what
   // lets a logged-out visitor see the app dimmed behind the dialog instead
   // of a blank page, the way ChatGPT's logged-out state works.
-
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-white via-slate-50 to-white text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-gray-100 relative overflow-hidden transition-colors duration-300">

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # dark_agent.py – رباتی که dark_recon را اجرا می‌کند و خروجی را به GPT می‌دهد
 # usage:
 #   python3 dark_agent.py cex.io
 
-import os
-import sys
-import json
-import subprocess
-import time
-import logging
 import datetime
+import json
+import logging
+import os
 import re
+import subprocess
+import sys
+import time
 from glob import glob
 from pathlib import Path
 
 from openai import OpenAI
+
 from src.core.paths import BASE_DIR
 
 logger = logging.getLogger(__name__)
@@ -25,12 +25,17 @@ def _get_daily_llm_logger() -> logging.Logger:
     """Lazy-init a daily JSONL logger shared with the main openai_client."""
     try:
         log_dir_env = os.getenv("LLM_LOG_DIR")
-        log_dir = Path(log_dir_env).expanduser() if log_dir_env else (BASE_DIR / "logs" / "llm")
+        log_dir = (
+            Path(log_dir_env).expanduser()
+            if log_dir_env
+            else (BASE_DIR / "logs" / "llm")
+        )
         log_dir.mkdir(parents=True, exist_ok=True)
 
         llm_log = logging.getLogger("mrrobot.llm")
         if not any(getattr(h, "log_dir", None) == log_dir for h in llm_log.handlers):
             from src.llm.openai_client import DailyFileHandler
+
             h = DailyFileHandler(log_dir=log_dir, prefix="llm")
             h.setFormatter(logging.Formatter("%(message)s"))
             llm_log.addHandler(h)
@@ -48,9 +53,11 @@ DARK_RECON_SCRIPT = PLUGIN_ROOT / "dark_recon_plugin" / "dark_recon_plugin.sh"
 RECON_ROOT = BASE_DIR / "data"
 RECON_GLOB = str(RECON_ROOT / "recon_*")
 
+
 def _get_openai_model() -> str:
     """Chat model from env (OPENAI_DEFAULT_CHAT_MODEL / LLM_MODEL)."""
     from src.llm.model_config import get_chat_model
+
     return get_chat_model()
 
 
@@ -63,6 +70,7 @@ client = OpenAI()
 
 
 # ============================== ابزار اجرای recon ==============================
+
 
 def run_dark_recon_agent(domain: str) -> Path:
     if not DARK_RECON_SCRIPT.is_file():
@@ -161,21 +169,33 @@ def ask_gpt_attack_plan(domain: str, recon_json: dict, max_retries: int = 3) -> 
     last_exc = None
     for attempt in range(1, max_retries + 1):
         try:
-            print(f"[*] Calling GPT attack planner (attempt {attempt}/{max_retries})...")
-            logger.info("ask_gpt_attack_plan: attempt %d/%d, model=%s", attempt, max_retries, model_name)
+            print(
+                f"[*] Calling GPT attack planner (attempt {attempt}/{max_retries})..."
+            )
+            logger.info(
+                "ask_gpt_attack_plan: attempt %d/%d, model=%s",
+                attempt,
+                max_retries,
+                model_name,
+            )
 
             # ── Log request ──
             try:
-                llm_log.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "event": "llm_request",
-                    "layer": "attack_plan",
-                    "api": "chat.completions",
-                    "model": model_name,
-                    "backend": base_url or "default",
-                    "attempt": attempt,
-                    "domain": domain,
-                }, ensure_ascii=False))
+                llm_log.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                            "event": "llm_request",
+                            "layer": "attack_plan",
+                            "api": "chat.completions",
+                            "model": model_name,
+                            "backend": base_url or "default",
+                            "attempt": attempt,
+                            "domain": domain,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             except Exception:
                 pass
 
@@ -205,19 +225,26 @@ def ask_gpt_attack_plan(domain: str, recon_json: dict, max_retries: int = 3) -> 
                         "tokens_prompt": getattr(usage, "prompt_tokens", None),
                         "tokens_completion": getattr(usage, "completion_tokens", None),
                     }
-                safe_text = content[:10_000] + ("...[TRUNCATED]" if len(content) > 10_000 else "")
-                llm_log.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "event": "llm_response",
-                    "layer": "attack_plan",
-                    "api": "chat.completions",
-                    "model": model_name,
-                    "backend": base_url or "default",
-                    "attempt": attempt,
-                    "domain": domain,
-                    **usage_data,
-                    "text": safe_text,
-                }, ensure_ascii=False))
+                safe_text = content[:10_000] + (
+                    "...[TRUNCATED]" if len(content) > 10_000 else ""
+                )
+                llm_log.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                            "event": "llm_response",
+                            "layer": "attack_plan",
+                            "api": "chat.completions",
+                            "model": model_name,
+                            "backend": base_url or "default",
+                            "attempt": attempt,
+                            "domain": domain,
+                            **usage_data,
+                            "text": safe_text,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
 
                 # Reasoning (NVIDIA NIM / DeepSeek may provide reasoning_content)
                 msg = response.choices[0].message
@@ -225,35 +252,46 @@ def ask_gpt_attack_plan(domain: str, recon_json: dict, max_retries: int = 3) -> 
                 if not reasoning:
                     reasoning = getattr(msg, "reasoning_content", None) or ""
                 safe_reasoning = str(reasoning)[:10_000_000] if reasoning else ""
-                llm_log.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "event": "llm_reasoning",
-                    "layer": "attack_plan",
-                    "api": "chat.completions",
-                    "model": model_name,
-                    "backend": base_url or "default",
-                    "missing": not bool(safe_reasoning),
-                    "reasoning": safe_reasoning,
-                }, ensure_ascii=False))
+                llm_log.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                            "event": "llm_reasoning",
+                            "layer": "attack_plan",
+                            "api": "chat.completions",
+                            "model": model_name,
+                            "backend": base_url or "default",
+                            "missing": not bool(safe_reasoning),
+                            "reasoning": safe_reasoning,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
 
                 # Thinking section
                 thinking = ""
                 think_match = re.search(
                     r"(?:## ?Thinking|<thinking>)(.*?)(?:</thinking>|## )",
-                    content, re.DOTALL | re.IGNORECASE,
+                    content,
+                    re.DOTALL | re.IGNORECASE,
                 )
                 if think_match:
                     thinking = think_match.group(1).strip()
-                llm_log.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "event": "llm_thinking",
-                    "layer": "attack_plan",
-                    "api": "chat.completions",
-                    "model": model_name,
-                    "backend": base_url or "default",
-                    "missing": not bool(thinking),
-                    "thinking": thinking if thinking else None,
-                }, ensure_ascii=False))
+                llm_log.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                            "event": "llm_thinking",
+                            "layer": "attack_plan",
+                            "api": "chat.completions",
+                            "model": model_name,
+                            "backend": base_url or "default",
+                            "missing": not bool(thinking),
+                            "thinking": thinking if thinking else None,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             except Exception:
                 pass
 
@@ -263,21 +301,28 @@ def ask_gpt_attack_plan(domain: str, recon_json: dict, max_retries: int = 3) -> 
             print(f"[!] GPT call failed on attempt {attempt}: {ex}")
             logger.error("ask_gpt_attack_plan: attempt %d failed: %s", attempt, ex)
             try:
-                llm_log.info(json.dumps({
-                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "event": "llm_error",
-                    "layer": "attack_plan",
-                    "api": "chat.completions",
-                    "model": model_name,
-                    "backend": base_url or "default",
-                    "attempt": attempt,
-                    "error": str(ex),
-                }, ensure_ascii=False))
+                llm_log.info(
+                    json.dumps(
+                        {
+                            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                            "event": "llm_error",
+                            "layer": "attack_plan",
+                            "api": "chat.completions",
+                            "model": model_name,
+                            "backend": base_url or "default",
+                            "attempt": attempt,
+                            "error": str(ex),
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             except Exception:
                 pass
             time.sleep(3 * attempt)
 
-    raise RuntimeError(f"[x] GPT attack plan generation failed after {max_retries} attempts: {last_exc}")
+    raise RuntimeError(
+        f"[x] GPT attack plan generation failed after {max_retries} attempts: {last_exc}"
+    )
 
 
 def save_attack_plan(domain: str, content: str) -> Path:

@@ -1,12 +1,13 @@
-import json
-import re
-import os
-import logging
 import datetime
+import json
+import logging
+import os
+import re
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any
+
 
 # ----------------------------------------------------------------------
 # Logger setup
@@ -61,13 +62,19 @@ def _get_daily_llm_logger() -> logging.Logger:
     """Lazy-init a daily JSONL logger shared with the main openai_client."""
     try:
         from src.core.paths import BASE_DIR as _BASE_DIR
+
         log_dir_env = os.getenv("LLM_LOG_DIR")
-        log_dir = Path(log_dir_env).expanduser() if log_dir_env else (_BASE_DIR / "logs" / "llm")
+        log_dir = (
+            Path(log_dir_env).expanduser()
+            if log_dir_env
+            else (_BASE_DIR / "logs" / "llm")
+        )
         log_dir.mkdir(parents=True, exist_ok=True)
 
         llm_log = logging.getLogger("mrrobot.llm")
         if not any(getattr(h, "log_dir", None) == log_dir for h in llm_log.handlers):
             from src.llm.openai_client import DailyFileHandler
+
             h = DailyFileHandler(log_dir=log_dir, prefix="llm")
             h.setFormatter(logging.Formatter("%(message)s"))
             llm_log.addHandler(h)
@@ -81,7 +88,7 @@ def _get_daily_llm_logger() -> logging.Logger:
 # ----------------------------------------------------------------------
 # JSON extraction helper
 # ----------------------------------------------------------------------
-def safe_parse_json(text: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+def safe_parse_json(text: str | dict[str, Any]) -> dict[str, Any]:
     """
     Accepts either a raw JSON string or an already‑decoded dict.
     Returns a dict with the extracted JSON object.
@@ -108,7 +115,9 @@ def safe_parse_json(text: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
 # ----------------------------------------------------------------------
 # LLM call wrapper
 # ----------------------------------------------------------------------
-def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) -> Dict[str, Any]:
+def call_llm(
+    *, system_prompt: str, user_prompt: str, json_mode: bool = True
+) -> dict[str, Any]:
     """
     Sends prompts to the model. If `json_mode` is True, the API is asked
     to return a JSON object. The function always returns a dict.
@@ -131,11 +140,10 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
         "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
+            {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.0,
         "top_p": 1.0,
-
     }
 
     if json_mode:
@@ -148,19 +156,24 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
     # ── Log full request to daily file ──
     llm_log = _get_daily_llm_logger()
     try:
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-            "event": "llm_request",
-            "layer": "call_llm",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "json_mode": json_mode,
-            "system_prompt_len": len(system_prompt or ""),
-            "user_prompt_len": len(user_prompt or ""),
-            "system_prompt": (system_prompt or "")[:50_000],
-            "user_prompt": (user_prompt or "")[:50_000],
-        }, ensure_ascii=False))
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                    "event": "llm_request",
+                    "layer": "call_llm",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "json_mode": json_mode,
+                    "system_prompt_len": len(system_prompt or ""),
+                    "user_prompt_len": len(user_prompt or ""),
+                    "system_prompt": (system_prompt or "")[:50_000],
+                    "user_prompt": (user_prompt or "")[:50_000],
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
@@ -169,22 +182,31 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
         response = client.chat.completions.create(**kwargs)
         raw = response.choices[0].message.content or ""
         _llm_elapsed = round((time.monotonic() - _llm_t0) * 1000, 2)
-        logger.info("LLM response received in %.1fms (%d chars)", _llm_elapsed, len(raw))
+        logger.info(
+            "LLM response received in %.1fms (%d chars)", _llm_elapsed, len(raw)
+        )
     except Exception as exc:
         _llm_elapsed = round((time.monotonic() - _llm_t0) * 1000, 2)
         logger.exception("LLM request failed after %.1fms", _llm_elapsed)
         # ── Log error ──
         try:
-            llm_log.info(json.dumps({
-                "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-                "event": "llm_error",
-                "layer": "call_llm",
-                "api": "chat.completions",
-                "model": model_name,
-                "backend": base_url or "default",
-                "elapsed_ms": _llm_elapsed,
-                "error": str(exc),
-            }, ensure_ascii=False))
+            llm_log.info(
+                json.dumps(
+                    {
+                        "ts": datetime.datetime.now().isoformat(
+                            timespec="milliseconds"
+                        ),
+                        "event": "llm_error",
+                        "layer": "call_llm",
+                        "api": "chat.completions",
+                        "model": model_name,
+                        "backend": base_url or "default",
+                        "elapsed_ms": _llm_elapsed,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                )
+            )
         except Exception:
             pass
         raise RuntimeError("Failed to get response from LLM") from exc
@@ -192,7 +214,7 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
     # ── Log full response + reasoning + tokens to daily file ──
     try:
         usage = getattr(response, "usage", None)
-        usage_data: Dict[str, Any] = {}
+        usage_data: dict[str, Any] = {}
         if usage:
             usage_data = {
                 "tokens_total": getattr(usage, "total_tokens", None),
@@ -201,19 +223,26 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
             }
 
         # Full response text (1 MB cap)
-        full_text = raw[:1_000_000] + ("...[TRUNCATED_AT_1MB]" if len(raw) > 1_000_000 else "")
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-            "event": "llm_response",
-            "layer": "call_llm",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "elapsed_ms": _llm_elapsed,
-            **usage_data,
-            "text_length": len(raw),
-            "text": full_text,
-        }, ensure_ascii=False))
+        full_text = raw[:1_000_000] + (
+            "...[TRUNCATED_AT_1MB]" if len(raw) > 1_000_000 else ""
+        )
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                    "event": "llm_response",
+                    "layer": "call_llm",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "elapsed_ms": _llm_elapsed,
+                    **usage_data,
+                    "text_length": len(raw),
+                    "text": full_text,
+                },
+                ensure_ascii=False,
+            )
+        )
 
         # Full reasoning (NVIDIA NIM, DeepSeek, etc. may provide reasoning_content)
         msg = response.choices[0].message
@@ -221,36 +250,50 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
         if not reasoning:
             reasoning = getattr(msg, "reasoning_content", None) or ""
         full_reasoning = str(reasoning)[:10_000_000] if reasoning else ""
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-            "event": "llm_reasoning",
-            "layer": "call_llm",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "elapsed_ms": _llm_elapsed,
-            "missing": not bool(full_reasoning),
-            "reasoning_length": len(full_reasoning),
-            "reasoning": full_reasoning,
-        }, ensure_ascii=False))
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                    "event": "llm_reasoning",
+                    "layer": "call_llm",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "elapsed_ms": _llm_elapsed,
+                    "missing": not bool(full_reasoning),
+                    "reasoning_length": len(full_reasoning),
+                    "reasoning": full_reasoning,
+                },
+                ensure_ascii=False,
+            )
+        )
 
         # Thinking section (some models embed <Thinking>...</Thinking> in output)
         thinking = ""
-        think_match = re.search(r"(?:## ?Thinking|<thinking>)(.*?)(?:</thinking>|## )", raw, re.DOTALL | re.IGNORECASE)
+        think_match = re.search(
+            r"(?:## ?Thinking|<thinking>)(.*?)(?:</thinking>|## )",
+            raw,
+            re.DOTALL | re.IGNORECASE,
+        )
         if think_match:
             thinking = think_match.group(1).strip()
-        llm_log.info(json.dumps({
-            "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
-            "event": "llm_thinking",
-            "layer": "call_llm",
-            "api": "chat.completions",
-            "model": model_name,
-            "backend": base_url or "default",
-            "elapsed_ms": _llm_elapsed,
-            "missing": not bool(thinking),
-            "thinking_length": len(thinking) if thinking else 0,
-            "thinking": thinking if thinking else None,
-        }, ensure_ascii=False))
+        llm_log.info(
+            json.dumps(
+                {
+                    "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                    "event": "llm_thinking",
+                    "layer": "call_llm",
+                    "api": "chat.completions",
+                    "model": model_name,
+                    "backend": base_url or "default",
+                    "elapsed_ms": _llm_elapsed,
+                    "missing": not bool(thinking),
+                    "thinking_length": len(thinking) if thinking else 0,
+                    "thinking": thinking if thinking else None,
+                },
+                ensure_ascii=False,
+            )
+        )
     except Exception:
         pass
 
@@ -261,14 +304,14 @@ def call_llm(*, system_prompt: str, user_prompt: str, json_mode: bool = True) ->
             logger.debug("Strict JSON parsing succeeded")
             return result
         except json.JSONDecodeError:
-            logger.warning("Strict JSON parsing failed – falling back to safe_parse_json")
+            logger.warning(
+                "Strict JSON parsing failed – falling back to safe_parse_json"
+            )
             # Fallback to safe extraction (handles dicts & noisy text)
             return safe_parse_json(raw)
     else:
         logger.debug("Non‑JSON mode – returning raw text")
         return {"text": raw}
-
-
 
 
 def parse_llm_json(raw):
@@ -293,7 +336,7 @@ def parse_llm_json(raw):
     if start == -1 or end == -1 or end <= start:
         raise ValueError("No JSON object found in LLM output")
 
-    json_text = text[start:end + 1]
+    json_text = text[start : end + 1]
 
     return json.loads(json_text)
 
@@ -305,9 +348,10 @@ if __name__ == "__main__":
     sys_prompt = "You are a JSON‑only assistant."
     usr_prompt = "Return the current UTC date and time as a JSON object."
     try:
-        result = call_llm(system_prompt=sys_prompt, user_prompt=usr_prompt, json_mode=True)
+        result = call_llm(
+            system_prompt=sys_prompt, user_prompt=usr_prompt, json_mode=True
+        )
         logger.info("Parsed result: %s", result)
         print("Parsed result:", result)
     except Exception as e:
         logger.error("Example execution failed: %s", e)
-

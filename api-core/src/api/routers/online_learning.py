@@ -3,9 +3,10 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from time import time
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 
@@ -33,13 +34,14 @@ router = APIRouter(tags=["online-learning"])
 # Helpers: dataset builder (from logged JSONL)
 # ============================================================
 
+
 def _iter_event_files(dir_path: Path) -> Iterable[Path]:
     for p in sorted(dir_path.glob("*.jsonl")):
         if p.is_file():
             yield p
 
 
-def _read_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
+def _read_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         for line_no, line in enumerate(f, 1):
             line = line.strip()
@@ -74,7 +76,7 @@ def build_online_learning_dataset_csv(
       - meta_json
       - source_file
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
 
     for file_path in _iter_event_files(events_dir):
@@ -94,7 +96,9 @@ def build_online_learning_dataset_csv(
                     "ts": obj.get("ts"),
                     "received_ts": obj.get("received_ts"),
                     "risk_score": obj.get("risk_score"),
-                    "payload_json": json.dumps(obj.get("payload") or {}, ensure_ascii=False),
+                    "payload_json": json.dumps(
+                        obj.get("payload") or {}, ensure_ascii=False
+                    ),
                     "meta_json": json.dumps(obj.get("meta") or {}, ensure_ascii=False),
                     "source_file": file_path.name,
                 }
@@ -130,6 +134,7 @@ def build_online_learning_dataset_csv(
 # Online Learning Proxy Endpoints
 # ============================================================
 
+
 @router.post(
     "/online-learning/events",
     response_model=OnlineLearningEventResponse,
@@ -146,13 +151,13 @@ async def send_online_learning_event(
             detail="Online learning client is not configured.",
         )
 
-    base_meta: Dict[str, Any] = {
+    base_meta: dict[str, Any] = {
         "remote_addr": request.client.host if request.client else None,
         "user_agent": request.headers.get("User-Agent"),
         "path": str(request.url.path),
     }
 
-    merged_meta: Dict[str, Any] = dict(base_meta)
+    merged_meta: dict[str, Any] = dict(base_meta)
     if body.metadata:
         merged_meta.update(body.metadata)
 
@@ -205,12 +210,12 @@ async def send_online_learning_bulk(
     failed = 0
 
     for evt in body.events:
-        base_meta: Dict[str, Any] = {
+        base_meta: dict[str, Any] = {
             "remote_addr": request.client.host if request.client else None,
             "user_agent": request.headers.get("User-Agent"),
             "path": str(request.url.path),
         }
-        merged_meta: Dict[str, Any] = dict(base_meta)
+        merged_meta: dict[str, Any] = dict(base_meta)
         if evt.metadata:
             merged_meta.update(evt.metadata)
 
@@ -246,6 +251,7 @@ async def send_online_learning_bulk(
 # Collector endpoint for OnlineLearningClient (darkworker side)
 # ============================================================
 
+
 @router.post(
     "/events",
     response_model=IncomingOnlineLearningResponse,
@@ -258,7 +264,7 @@ async def receive_online_learning_event(
     remote_addr = request.client.host if request.client else None
     user_agent = request.headers.get("User-Agent")
 
-    event_dict: Dict[str, Any] = body.model_dump()
+    event_dict: dict[str, Any] = body.model_dump()
     event_dict.setdefault("meta", {})
     event_dict["meta"]["remote_addr"] = remote_addr
     event_dict["meta"]["user_agent"] = user_agent
@@ -292,12 +298,13 @@ async def receive_online_learning_event(
 # Build dataset from logged events
 # ============================================================
 
+
 @router.post("/online-learning/build-dataset")
 async def build_online_learning_dataset(
     request: Request,
-    body: Dict[str, Any] = Body(default={}),
+    body: dict[str, Any] = Body(default={}),
     current_user: User = Depends(get_current_user),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build a CSV from JSONL logs under data/online-learning-events/.
 

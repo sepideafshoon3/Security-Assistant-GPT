@@ -3,9 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-DEFAULT_AUDIT_LOG = Path(
-    os.getenv("AUDIT_LOG_PATH", "logs/actions-audit.log")
-)
+DEFAULT_AUDIT_LOG = Path(os.getenv("AUDIT_LOG_PATH", "logs/actions-audit.log"))
 
 
 def audit_log(event_type: str, data: dict) -> None:

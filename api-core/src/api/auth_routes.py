@@ -27,13 +27,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
 def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
     normalized_email = body.email.lower()
 
     existing = db.query(User).filter(User.email == normalized_email).first()
     if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        )
 
     user = User(email=normalized_email, password_hash=hash_password(body.password))
     db.add(user)
@@ -41,7 +45,9 @@ def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        )
     db.refresh(user)
 
     audit_log("auth_signup", {"user_id": user.id})
@@ -59,7 +65,9 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
 
     user = db.query(User).filter(User.email == normalized_email).first()
     if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
 
     audit_log("auth_login", {"user_id": user.id})
 

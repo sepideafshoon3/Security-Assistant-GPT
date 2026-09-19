@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 
 class FileStore:
@@ -12,7 +11,7 @@ class FileStore:
         path.write_text(content)
         return path
 
-    def load_text(self, key: str) -> Optional[str]:
+    def load_text(self, key: str) -> str | None:
         path = self.base_dir / f"{key}.txt"
         if not path.exists():
             return None
