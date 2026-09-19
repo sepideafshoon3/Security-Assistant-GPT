@@ -132,7 +132,7 @@ async def chat(
         logger.exception(
             "[chat] secure_chat failed | id=%s error=%r", conversation.id, e
         )
-        raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}") from e
 
     if len(history) == 0:
         _maybe_generate_title(conversation, advisor, last_user_msg["content"], db)
@@ -263,7 +263,7 @@ async def openai_compatible_chat(
         logger.exception(
             "[openai_chat] secure_chat failed | id=%s error=%r", conversation_id, e
         )
-        raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}") from e
 
     chat_memory.append_turn(
         conversation_id,

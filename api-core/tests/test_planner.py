@@ -1,5 +1,5 @@
-from src.core.planner import Planner
 from src.core.models import Task
+from src.core.planner import Planner
 
 
 def test_planner_creates_actions():

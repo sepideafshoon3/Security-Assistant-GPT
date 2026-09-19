@@ -51,6 +51,9 @@ ignore = [
     "E501",  # line length is Black's job, not Ruff's
     "B008",  # Depends(...)/Body(...) as default args is the correct FastAPI pattern
 ]
+[tool.ruff.lint.per-file-ignores]
+"src/api/http.py" = ["E402"]
+"src/main.py" = ["E402"]
 
 [tool.black]
 line-length = 88

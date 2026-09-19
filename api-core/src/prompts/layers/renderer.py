@@ -220,7 +220,7 @@ class PromptRenderer:
 
         # Parse template to see what variables/functions are used
         try:
-            parsed = self._env.parse(template_source)
+            self._env.parse(template_source)
             # Check for any function calls or attribute access that might be dangerous
             # This is a basic check - the sandbox will handle the rest
         except Exception:
@@ -258,7 +258,7 @@ def _truthy(value: Any) -> bool:
         return value
     if value is None:
         return False
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return value != 0
     text = str(value).strip().lower()
     if text in {"", "false", "0", "none", "null", "no", "off"}:

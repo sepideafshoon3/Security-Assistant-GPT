@@ -334,7 +334,7 @@ async def build_online_learning_dataset(
         )
     except Exception as e:
         logger.exception("[dataset] build failed | error=%r", e)
-        raise HTTPException(status_code=500, detail=f"Dataset build failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Dataset build failed: {e}") from e
 
     audit_log(
         "online_learning_build_dataset",

@@ -5,9 +5,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
 
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from src.api.http import app
+from src.api.http import app  # noqa: E402
 
 app.add_middleware(
     CORSMiddleware,

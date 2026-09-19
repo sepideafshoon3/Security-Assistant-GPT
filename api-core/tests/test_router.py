@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -14,7 +12,6 @@ from src.llm.router import (
     create_advisor,
     detect_provider,
     get_prompt_engine,
-    get_prompt_registry,
     normalize_model_for_provider,
 )
 from src.prompts.layers import (
@@ -23,7 +20,6 @@ from src.prompts.layers import (
     build_xai_registry,
     get_engine_for_provider,
 )
-
 
 # ---------------------------------------------------------------------------
 # detect_provider
@@ -75,11 +71,14 @@ def test_normalize_model_native_strips_xai_prefix(monkeypatch):
     assert normalize_model_for_provider("x-ai/grok-4.5", "xai", openrouter=False) == (
         "grok-4.5"
     )
-    assert normalize_model_for_provider("xai/grok-3", "xai", openrouter=False) == "grok-3"
+    assert (
+        normalize_model_for_provider("xai/grok-3", "xai", openrouter=False) == "grok-3"
+    )
     assert normalize_model_for_provider("grok-3", "xai", openrouter=False) == "grok-3"
-    assert normalize_model_for_provider(
-        "openai/gpt-oss-120b", "openai", openrouter=False
-    ) == "gpt-oss-120b"
+    assert (
+        normalize_model_for_provider("openai/gpt-oss-120b", "openai", openrouter=False)
+        == "gpt-oss-120b"
+    )
 
 
 def test_normalize_model_openrouter_vendor_prefixes():

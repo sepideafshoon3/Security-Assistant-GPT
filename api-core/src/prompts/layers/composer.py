@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Union
+from typing import Any
 
 from src.prompts.layers.errors import LayerConfigError, LayerRegistryError
 from src.prompts.layers.models import (
@@ -19,8 +19,8 @@ from src.prompts.layers.models import (
 from src.prompts.layers.registry import ContentRegistry
 from src.prompts.layers.renderer import PromptRenderer
 
-LayerInput = Union[PromptLayerConfig, Mapping[str, Any]]
-StackInput = Union[PromptStackConfig, Mapping[str, Any]]
+LayerInput = PromptLayerConfig | Mapping[str, Any]
+StackInput = PromptStackConfig | Mapping[str, Any]
 
 
 class PromptComposer:

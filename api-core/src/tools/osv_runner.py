@@ -13,7 +13,7 @@ def run_osv_scanner(repository_path: str, reports_dir: Path) -> ToolResult:
 
     # Fake output to keep skeleton harmless and self-contained.
     output_path.write_text(
-        '{"status": "not-implemented", "repo": "%s"}' % repository_path
+        f'{{"status": "not-implemented", "repo": "{repository_path}"}}'
     )
 
     return ToolResult(

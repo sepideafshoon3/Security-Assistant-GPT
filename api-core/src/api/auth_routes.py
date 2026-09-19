@@ -47,7 +47,7 @@ def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
-        )
+        ) from None
     db.refresh(user)
 
     audit_log("auth_signup", {"user_id": user.id})

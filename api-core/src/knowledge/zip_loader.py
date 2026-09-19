@@ -115,8 +115,8 @@ def load_zip_resource(zip_path: Path, max_chars: int = 16000) -> str:
 
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Invalid ZIP file")
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid ZIP file") from exc
 
     chunks: list[str] = []
     total = 0
@@ -194,8 +194,8 @@ def grep_zip_resource(
 
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Invalid ZIP file")
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid ZIP file") from exc
 
     matches: list[dict[str, Any]] = []
     needle = keyword.lower() if ignore_case else keyword

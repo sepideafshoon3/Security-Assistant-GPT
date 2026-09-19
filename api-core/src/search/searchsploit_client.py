@@ -36,8 +36,7 @@ class SearchsploitClient:
             # searchsploit -j outputs JSON
             proc = subprocess.run(
                 [self.binary, "-j", query],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 timeout=20,
             )

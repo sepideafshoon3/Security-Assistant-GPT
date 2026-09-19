@@ -255,7 +255,10 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
 
         """Wrapper to detect and block prompt injection in API calls."""
         # Check for injection patterns in any string parameters
-        for key, value in kwargs.items():
+        for (
+            key,
+            value,
+        ) in kwargs.items():  # noqa: F821 -- known dead code, see TODO above
             if isinstance(value, str):
                 # Block obvious injection attempts
                 injection_patterns = [
@@ -272,4 +275,4 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
                         raise ValueError(f"Potential injection detected in {key}")
 
         # Proceed with the call
-        return super()._call(**kwargs)
+        return super()._call(**kwargs)  # noqa: F821

@@ -1,7 +1,9 @@
 README.md
+
 # Security Assistant GPT (Lab-Only)
 
 A defensive, lab-only security assistant that:
+
 - Plans secure analysis tasks.
 - Runs static and dependency analysis via sandboxed tools.
 - Enforces strict policies (lab scope, no self-replication, no real-world exploitation).
@@ -34,3 +36,4 @@ uvicorn src.api.http:app --reload
 Run CLI:
 
 python -m src.cli.cli --help
+```

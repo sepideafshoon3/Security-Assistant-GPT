@@ -79,8 +79,6 @@ SUPPORTED_CHAT_MODELS = {
     "o4-mini",
     "o4",
     "o3-mini",
-    # add (won't hurt even if you route it to Responses)
-    "openai/gpt-oss-120b",
 }
 
 MODEL_ALIASES = {

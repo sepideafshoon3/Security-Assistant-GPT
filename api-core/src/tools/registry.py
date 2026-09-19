@@ -492,7 +492,7 @@ def _handle_research_search(args: dict[str, Any]) -> dict[str, Any]:
     seen_urls: set = set()
     errors: list[str] = []
 
-    for idx, q in enumerate(queries):
+    for _idx, q in enumerate(queries):
         q = str(q).strip()
         if not q:
             continue

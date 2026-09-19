@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from src.tools.osv_runner import run_osv_scanner
 
 

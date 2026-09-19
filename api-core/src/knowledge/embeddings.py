@@ -35,7 +35,7 @@ def embed_texts(texts: list[str], model: str | None = None) -> list[list[float]]
 
 
 def l2_distance(a: list[float], b: list[float]) -> float:
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=False)))
 
 
 def build_embeddings_index(resource_dir: Path, model: str | None = None) -> None:
@@ -51,7 +51,7 @@ def build_embeddings_index(resource_dir: Path, model: str | None = None) -> None
 
     out_path = resource_dir / "embeddings.jsonl"
     with out_path.open("w", encoding="utf-8") as f:
-        for file_path, vec in zip(chunk_files, vectors):
+        for file_path, vec in zip(chunk_files, vectors, strict=False):
             record = {
                 "file": file_path.name,
                 "embedding": vec,

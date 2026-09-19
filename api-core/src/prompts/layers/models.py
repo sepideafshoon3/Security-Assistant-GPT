@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class PromptRole(str, Enum):
+class PromptRole(StrEnum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
 
 
-class PromptMode(str, Enum):
+class PromptMode(StrEnum):
     """Composition mode for the prompt engine."""
 
     SINGLE = "single"

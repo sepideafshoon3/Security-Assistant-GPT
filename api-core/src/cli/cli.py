@@ -2,11 +2,10 @@ import argparse
 import uuid
 from pathlib import Path
 
-from src.policies.loader import load_policy_engine
-
 from src.core.executor import Executor
 from src.core.models import Task
 from src.core.planner import Planner
+from src.policies.loader import load_policy_engine
 from src.security.audit import audit_log
 
 
