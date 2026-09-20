@@ -244,16 +244,19 @@ async def openai_compatible_chat(
         conversation_id = str(uuid.uuid4())
         history: list[dict[str, str]] = []
     else:
+        # Ownership check: a conversation_id that doesn't exist under THIS
+        # user's own folder is either a typo or someone else's id — either
+        # way, reject it rather than silently starting a fresh history
+        # under an id we don't actually own.
+        if not chat_memory.conversation_exists(current_user.id, conversation_id):
+            raise HTTPException(status_code=404, detail="Conversation not found")
         try:
-            history = chat_memory.load_history(conversation_id) or []
+            history = chat_memory.load_history(current_user.id, conversation_id) or []
         except Exception as e:
             logger.warning(
                 "[openai_chat] load history failed | id=%s error=%r", conversation_id, e
             )
             history = []
-
-    if not isinstance(history, list):
-        history = []
 
     llm_messages: list[dict[str, str]] = history + [last_user_msg]
 
@@ -266,6 +269,7 @@ async def openai_compatible_chat(
         raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}") from e
 
     chat_memory.append_turn(
+        current_user.id,
         conversation_id,
         user_msg=last_user_msg,
         assistant_msg={"role": "assistant", "content": reply_text},

@@ -6,9 +6,9 @@ from pathlib import Path
 
 class ChatMemory:
     """
-    Very simple file-based chat memory.
+    Very simple file-based chat memory, scoped per user.
 
-    - One JSONL file per conversation_id.
+    - One JSONL file per (user_id, conversation_id): base_dir/{user_id}/{conversation_id}.jsonl
     - Each line: {"role": "user"|"assistant", "content": "..."}
     - We only store user/assistant messages (no system prompts).
     """
@@ -18,11 +18,16 @@ class ChatMemory:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.max_messages = max_messages
 
-    def _conv_path(self, conversation_id: str) -> Path:
-        return self.base_dir / f"{conversation_id}.jsonl"
+    def _conv_path(self, user_id: str, conversation_id: str) -> Path:
+        user_dir = self.base_dir / user_id
+        user_dir.mkdir(parents=True, exist_ok=True)
+        return user_dir / f"{conversation_id}.jsonl"
 
-    def load_history(self, conversation_id: str) -> list[dict[str, str]]:
-        path = self._conv_path(conversation_id)
+    def conversation_exists(self, user_id: str, conversation_id: str) -> bool:
+        return self._conv_path(user_id, conversation_id).exists()
+
+    def load_history(self, user_id: str, conversation_id: str) -> list[dict[str, str]]:
+        path = self._conv_path(user_id, conversation_id)
         if not path.exists():
             return []
         messages: list[dict[str, str]] = []
@@ -42,19 +47,20 @@ class ChatMemory:
         return messages
 
     def save_history(
-        self, conversation_id: str, messages: list[dict[str, str]]
+        self, user_id: str, conversation_id: str, messages: list[dict[str, str]]
     ) -> None:
         """
         Overwrites the conversation file with the last max_messages messages.
         """
         trimmed = messages[-self.max_messages :]
-        path = self._conv_path(conversation_id)
+        path = self._conv_path(user_id, conversation_id)
         with path.open("w", encoding="utf-8") as f:
             for m in trimmed:
                 f.write(json.dumps(m, ensure_ascii=False) + "\n")
 
     def append_turn(
         self,
+        user_id: str,
         conversation_id: str,
         user_msg: dict[str, str],
         assistant_msg: dict[str, str],
@@ -62,10 +68,10 @@ class ChatMemory:
         """
         Load history, append user+assistant, save, and return new history.
         """
-        history = self.load_history(conversation_id)
+        history = self.load_history(user_id, conversation_id)
         if user_msg:
             history.append({"role": "user", "content": user_msg["content"]})
         if assistant_msg:
             history.append({"role": "assistant", "content": assistant_msg["content"]})
-        self.save_history(conversation_id, history)
+        self.save_history(user_id, conversation_id, history)
         return history

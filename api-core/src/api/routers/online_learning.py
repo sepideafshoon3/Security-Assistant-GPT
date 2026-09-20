@@ -24,6 +24,7 @@ from src.learning.schemas_online_learning import (
 )
 from src.security.audit import audit_log
 from src.security.auth import get_current_user
+from src.security.service_auth import verify_online_learning_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +257,7 @@ async def send_online_learning_bulk(
     "/events",
     response_model=IncomingOnlineLearningResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(verify_online_learning_api_key)],
 )
 async def receive_online_learning_event(
     body: IncomingOnlineLearningEvent,
@@ -265,7 +267,8 @@ async def receive_online_learning_event(
     user_agent = request.headers.get("User-Agent")
 
     event_dict: dict[str, Any] = body.model_dump()
-    event_dict.setdefault("meta", {})
+    if event_dict.get("meta") is None:
+        event_dict["meta"] = {}
     event_dict["meta"]["remote_addr"] = remote_addr
     event_dict["meta"]["user_agent"] = user_agent
     event_dict["received_ts"] = time()
