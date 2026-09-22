@@ -8,7 +8,6 @@ import {
   X,
   Pencil,
   Trash2,
-  Check,
   MoreHorizontal,
   Pin,
   PinOff,
@@ -330,7 +329,7 @@ export function ConversationList({
                         aria-label="Save name"
                         className="absolute right-3 top-3.5 p-1 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
                       >
-                        <Check className="w-3.5 h-3.5" aria-hidden />
+                        {/* <Check className="w-3.5 h-3.5" aria-hidden /> */}
                       </button>
                     ) : (
                       <div

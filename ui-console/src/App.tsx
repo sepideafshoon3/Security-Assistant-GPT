@@ -471,6 +471,9 @@ export default function App() {
           conversation={selectedConversation || null}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
+          onPinConversation={handlePinConversation}
           isLoading={isLoading}
         />
       </div>
