@@ -167,7 +167,7 @@ def _normalize_provider(value: str) -> Provider:
     cleaned = (value or "").strip().lower()
     if cleaned in {"xai", "x", "x-ai", "x_ai"}:
         return "xai"
-    if cleaned in {"openai", "oai", "open-ai", "open_ai"}:
+    if cleaned in {"openai", "oai", "open-ai", "open_ai", "nvidia", "nim"}:
         return "openai"
     # Unknown explicit values fall back to model heuristics if possible
     logger.warning("unknown LLM provider %r; defaulting to openai", value)
