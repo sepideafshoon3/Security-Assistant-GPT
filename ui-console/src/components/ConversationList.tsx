@@ -1,6 +1,21 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import type { Conversation } from "../App";
-import { Search, Plus, Sun, Moon, X, Pencil, Trash2, Check } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Sun,
+  Moon,
+  X,
+  Pencil,
+  Trash2,
+  Check,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  FolderPlus,
+  Users,
+  Share2,
+} from "lucide-react";
 import { cn } from "./ui/utils";
 import { UserMenu } from "./UserMenu";
 import {
@@ -13,6 +28,13 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "./ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -31,6 +53,7 @@ interface ConversationListProps {
   onLoginClick: () => void;
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, title: string) => void;
+  onPinConversation: (id: string) => void;
 }
 
 type ConversationStatus = NonNullable<Conversation["status"]>;
@@ -76,11 +99,13 @@ export function ConversationList({
   onLoginClick,
   onDeleteConversation,
   onRenameConversation,
+  onPinConversation,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -112,7 +137,10 @@ export function ConversationList({
       .filter(
         (c) => !q || c.title.toLowerCase().includes(q) || c.lastMessage.toLowerCase().includes(q),
       )
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort((a, b) => {
+        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+        return b.timestamp.getTime() - a.timestamp.getTime();
+      });
   }, [conversations, query]);
 
   const formatTime = (date: Date) => {
@@ -267,8 +295,20 @@ export function ConversationList({
                             className="flex-1 min-w-0 bg-input-background border border-accent-hover/50 rounded px-1.5 py-0.5 text-sm text-fg-primary outline-none focus:ring-1 focus:ring-accent-hover/40"
                           />
                         ) : (
-                          <h3 className="text-fg-primary text-sm truncate flex-1">
-                            {conversation.title}
+                          <h3
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              startRename(conversation);
+                            }}
+                            className="text-fg-primary text-sm truncate flex-1 flex items-center gap-1.5"
+                          >
+                            {conversation.pinned && (
+                              <Pin
+                                className="w-3 h-3 text-fg-faint shrink-0 rotate-45"
+                                aria-hidden
+                              />
+                            )}
+                            <span className="truncate">{conversation.title}</span>
                           </h3>
                         )}
                         {!isRenaming && (
@@ -293,27 +333,81 @@ export function ConversationList({
                         <Check className="w-3.5 h-3.5" aria-hidden />
                       </button>
                     ) : (
-                      <div className="absolute right-2 top-2.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startRename(conversation);
-                          }}
-                          aria-label="Rename conversation"
-                          className="p-1.5 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
+                      <div
+                        className={cn(
+                          "absolute right-2 top-2.5 transition-opacity",
+                          openMenuId === conversation.id
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+                        )}
+                      >
+                        <DropdownMenu
+                          open={openMenuId === conversation.id}
+                          onOpenChange={(open) => setOpenMenuId(open ? conversation.id : null)}
                         >
-                          <Pencil className="w-3.5 h-3.5" aria-hidden />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPendingDeleteId(conversation.id);
-                          }}
-                          aria-label="Delete conversation"
-                          className="p-1.5 rounded text-fg-tertiary hover:text-status-danger hover:bg-secondary transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" aria-hidden />
-                        </button>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="More options"
+                              className="p-1.5 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
+                            >
+                              <MoreHorizontal className="w-3.5 h-3.5" aria-hidden />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-44"
+                          >
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                onPinConversation(conversation.id);
+                                setOpenMenuId(null);
+                              }}
+                            >
+                              {conversation.pinned ? (
+                                <PinOff className="w-3.5 h-3.5" aria-hidden />
+                              ) : (
+                                <Pin className="w-3.5 h-3.5" aria-hidden />
+                              )}
+                              {conversation.pinned ? "Unpin" : "Pin"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                startRename(conversation);
+                                setOpenMenuId(null);
+                              }}
+                            >
+                              <Pencil className="w-3.5 h-3.5" aria-hidden />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
+                                setPendingDeleteId(conversation.id);
+                                setOpenMenuId(null);
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                              Delete
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {/* Project/group data model + share links don't exist on the
+                               backend yet — these are placeholders until that lands. */}
+                            <DropdownMenuItem disabled title="Coming soon">
+                              <FolderPlus className="w-3.5 h-3.5" aria-hidden />
+                              Add to project
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled title="Coming soon">
+                              <Users className="w-3.5 h-3.5" aria-hidden />
+                              Add to group
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled title="Coming soon">
+                              <Share2 className="w-3.5 h-3.5" aria-hidden />
+                              Share
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     )}
                   </div>

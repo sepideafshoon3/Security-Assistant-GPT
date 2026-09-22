@@ -32,6 +32,7 @@ export interface Conversation {
   timestamp: Date;
   messages: Message[];
   status?: "clean" | "findings" | "critical"; // TODO: source from backend scan results
+  pinned?: boolean; // TODO: local-only for now — no backend field/endpoint yet (see handlePinConversation)
 }
 
 function deriveStatus(text: string): Conversation["status"] {
@@ -210,6 +211,15 @@ export default function App() {
       setConversations(previous);
       setError(getFriendlyErrorMessage(e));
     }
+  };
+
+  const handlePinConversation = (conversationId: string) => {
+    // Local-only: there's no `pinned` column or endpoint on the backend yet
+    // (project/folder grouping is a later-week task), so this doesn't
+    // survive a reload. Wire this up to a real PATCH once that lands.
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, pinned: !c.pinned } : c)),
+    );
   };
 
   const handleSendMessage = async (text: string) => {
@@ -453,6 +463,7 @@ export default function App() {
           onLogout={auth.logout}
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
+          onPinConversation={handlePinConversation}
           onLoginClick={() => setAuthModal({ open: true, mode: "login" })}
         />
 
