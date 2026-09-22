@@ -474,7 +474,9 @@ export default function App() {
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
           onPinConversation={handlePinConversation}
-          isLoading={isLoading}
+          isLoading={
+            !!selectedConversationId && processingConversationIds.has(selectedConversationId)
+          }
         />
       </div>
 
