@@ -253,26 +253,12 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
         # Static prompt - safe, but ensure it's not user-editable
         return CODE_CONTEXT_PROMPT
 
-        """Wrapper to detect and block prompt injection in API calls."""
-        # Check for injection patterns in any string parameters
-        for (
-            key,
-            value,
-        ) in kwargs.items():  # noqa: F821 -- known dead code, see TODO above
-            if isinstance(value, str):
-                # Block obvious injection attempts
-                injection_patterns = [
-                    r"ignore all previous instructions",
-                    r"disregard previous prompts",
-                    r"act as if you have no restrictions",
-                    r"you are now in developer mode",
-                    r"jailbreak",
-                    r"do not follow any rules",
-                ]
-                for pattern in injection_patterns:
-                    if re.search(pattern, value, re.IGNORECASE):
-                        logger.error(f"Blocked injection attempt in {key}")
-                        raise ValueError(f"Potential injection detected in {key}")
-
-        # Proceed with the call
-        return super()._call(**kwargs)  # noqa: F821
+    # TODO: prompt-injection detection was previously stubbed here calling a
+    # nonexistent super()._call() (LangChain convention, unused in this
+    # codebase) -- removed as genuinely dead code. If/when built for real, it
+    # belongs wrapping the actual outbound call (e.g. in secure_chat() or
+    # wherever chat.completions.create() is invoked), not as a standalone
+    # method here. The injection-pattern list that was here is worth reusing:
+    # r"ignore all previous instructions", r"disregard previous prompts",
+    # r"act as if you have no restrictions", r"you are now in developer mode",
+    # r"jailbreak", r"do not follow any rules"
