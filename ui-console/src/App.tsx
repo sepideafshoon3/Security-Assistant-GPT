@@ -134,7 +134,16 @@ export default function App() {
   }, [auth.isCheckingSession, auth.isAuthenticated]);
 
   useEffect(() => {
-    if (!auth.isAuthenticated) return;
+    if (!auth.isAuthenticated) {
+      // Wipe any previously-loaded user's data immediately on logout --
+      // otherwise it stays visible underneath the login modal, since the
+      // app shell renders dimmed behind it rather than unmounting.
+      setConversations([]);
+      setSelectedConversationId(null);
+      setError(null);
+      setErrorRetry(null);
+      return;
+    }
 
     const load = async () => {
       setIsLoading(true);
