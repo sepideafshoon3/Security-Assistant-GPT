@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from src.api.state import (
     chat_memory,
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
 
-def _maybe_generate_title(
+async def _maybe_generate_title(
     conversation: Conversation,
     advisor: Any,
     first_user_message: str,
@@ -35,19 +36,17 @@ def _maybe_generate_title(
     if not conversation.title_is_generated:
         return
     try:
-        title = (
-            advisor.secure_chat(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "یک عنوان بسیار کوتاه (حداکثر ۵ کلمه) برای این گفتگو بده. فقط عنوان را برگردان.",
-                    },
-                    {"role": "user", "content": first_user_message},
-                ]
-            )
-            .strip()
-            .strip('"')
+        raw_title = await run_in_threadpool(
+            advisor.secure_chat,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "یک عنوان بسیار کوتاه (حداکثر ۵ کلمه) برای این گفتگو بده. فقط عنوان را برگردان.",
+                },
+                {"role": "user", "content": first_user_message},
+            ],
         )
+        title = raw_title.strip().strip('"')
         if title:
             conversation.title = title[:255]
             conversation.title_is_generated = False  # دیگه خودکار عوضش نکن
@@ -127,7 +126,9 @@ async def chat(
     llm_messages: list[dict[str, str]] = history + [last_user_msg]
 
     try:
-        reply_text: str = advisor.secure_chat(messages=llm_messages)
+        reply_text: str = await run_in_threadpool(
+            advisor.secure_chat, messages=llm_messages
+        )
     except Exception as e:
         logger.exception(
             "[chat] secure_chat failed | id=%s error=%r", conversation.id, e
@@ -135,7 +136,7 @@ async def chat(
         raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}") from e
 
     if len(history) == 0:
-        _maybe_generate_title(conversation, advisor, last_user_msg["content"], db)
+        await _maybe_generate_title(conversation, advisor, last_user_msg["content"], db)
 
     db.add(
         Message(
@@ -261,7 +262,9 @@ async def openai_compatible_chat(
     llm_messages: list[dict[str, str]] = history + [last_user_msg]
 
     try:
-        reply_text: str = advisor.secure_chat(messages=llm_messages)
+        reply_text: str = await run_in_threadpool(
+            advisor.secure_chat, messages=llm_messages
+        )
     except Exception as e:
         logger.exception(
             "[openai_chat] secure_chat failed | id=%s error=%r", conversation_id, e
