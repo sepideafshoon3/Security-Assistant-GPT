@@ -152,8 +152,22 @@ export default function App() {
       setIsLoading(true);
       setError(null);
       try {
+        // AFTER
         const backendConvs = await fetchConversations();
-        const mapped = backendConvs.map(mapBackendConversationToConversation);
+
+        // Clear out abandoned empty chats (e.g. a conversation row that got
+        // created but never received a message, such as a request that was
+        // interrupted before it could persist anything). A conversation with
+        // a job still in flight always has at least its user message saved
+        // by now, so num_messages === 0 here genuinely means "nothing to
+        // show" rather than "still working."
+        const empty = backendConvs.filter((c) => c.num_messages === 0);
+        const nonEmpty = backendConvs.filter((c) => c.num_messages > 0);
+        if (empty.length > 0) {
+          await Promise.allSettled(empty.map((c) => deleteConversation(c.conversation_id)));
+        }
+
+        const mapped = nonEmpty.map(mapBackendConversationToConversation);
         setConversations(mapped);
 
         if (mapped.length > 0) {
@@ -169,7 +183,11 @@ export default function App() {
               const finalStatus = await waitForChatJob(jobId);
               if (finalStatus.status === "done") {
                 const refreshed = await fetchConversations();
-                setConversations(refreshed.map(mapBackendConversationToConversation));
+                setConversations(
+                  refreshed
+                    .filter((c) => c.num_messages > 0)
+                    .map(mapBackendConversationToConversation),
+                );
               }
             } finally {
               unmarkProcessing(mostRecent.id);
@@ -284,28 +302,36 @@ export default function App() {
         if (finalStatus.status === "error") {
           throw new Error(finalStatus.error ?? "Generation failed");
         }
-        const resp: BackendChatResponse = {
-          conversation_id: finalStatus.conversation_id,
-          reply: finalStatus.reply,
-        };
 
-        const backendMessages = mapBackendToMessages(resp);
-        const assistantMessages = backendMessages.filter((m) => m.sender === "contact");
-        const lastAssistantText = assistantMessages[assistantMessages.length - 1]?.text || trimmed;
-
-        const finalConv: Conversation = {
-          id: resp.conversation_id,
-          title: "Security Review",
-          lastMessage: lastAssistantText,
-          timestamp: new Date(),
-          messages: [userMessage, ...assistantMessages],
-        };
+        // Pull the real record back from the backend instead of guessing at
+        // it client-side: the title here may be an auto-generated one (see
+        // _maybe_generate_title on the backend), so a hardcoded placeholder
+        // would only ever show the right name after a manual refresh.
+        const refreshed = await fetchConversations();
+        const finalSummary = refreshed.find(
+          (c) => c.conversation_id === finalStatus.conversation_id,
+        );
+        const finalConv: Conversation = finalSummary
+          ? mapBackendConversationToConversation(finalSummary)
+          : {
+              id: finalStatus.conversation_id,
+              title: "Conversation",
+              lastMessage: finalStatus.reply || trimmed,
+              timestamp: new Date(),
+              messages: [
+                userMessage,
+                ...mapBackendToMessages({
+                  conversation_id: finalStatus.conversation_id,
+                  reply: finalStatus.reply,
+                }),
+              ],
+            };
 
         setConversations((prev) => {
           const others = prev.filter((c) => c.id !== tempId);
           return [...others, finalConv];
         });
-        setSelectedConversationId(resp.conversation_id);
+        setSelectedConversationId(finalStatus.conversation_id);
       } catch (e) {
         console.error(e);
         const friendly = getFriendlyErrorMessage(e);
