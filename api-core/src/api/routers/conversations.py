@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.api.schemas.schemas import ConversationRenameRequest
 from src.core.models import ConversationSummary
-from src.db.models import Conversation, User
+from src.db.models import Conversation, GenerationJob, User
 from src.db.session import get_db
 from src.security.auth import get_current_user
 
@@ -44,6 +44,25 @@ async def list_conversations(
         )
 
     return {"conversations": [s.model_dump() for s in summaries]}
+
+
+@router.get("/conversations/{conversation_id}/active-job")
+async def get_active_job(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    _get_owned_conversation_or_404(conversation_id, current_user, db)
+    job = (
+        db.query(GenerationJob)
+        .filter(
+            GenerationJob.conversation_id == conversation_id,
+            GenerationJob.status == "running",
+        )
+        .order_by(GenerationJob.created_at.desc())
+        .first()
+    )
+    return {"job_id": job.id if job else None}
 
 
 def _get_owned_conversation_or_404(

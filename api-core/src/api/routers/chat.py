@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -16,8 +17,8 @@ from src.api.state import (
     online_learning_dispatcher,
     resolve_llm_advisor,
 )
-from src.db.models import Conversation, Message, User
-from src.db.session import get_db
+from src.db.models import Conversation, GenerationJob, Message, User
+from src.db.session import SessionLocal, get_db
 from src.learning.online_learning_events import ChatTurnEvent
 from src.security.audit import audit_log
 from src.security.auth import get_current_user
@@ -41,7 +42,7 @@ async def _maybe_generate_title(
             messages=[
                 {
                     "role": "system",
-                    "content": "یک عنوان بسیار کوتاه (حداکثر ۵ کلمه) برای این گفتگو بده. فقط عنوان را برگردان.",
+                    "content": "Provide a very short title (maximum 5 words) for this conversation. Return only the title.",
                 },
                 {"role": "user", "content": first_user_message},
             ],
@@ -49,10 +50,73 @@ async def _maybe_generate_title(
         title = raw_title.strip().strip('"')
         if title:
             conversation.title = title[:255]
-            conversation.title_is_generated = False  # دیگه خودکار عوضش نکن
+            conversation.title_is_generated = False
             db.commit()
     except Exception:
         logger.exception("[chat] title generation failed | id=%s", conversation.id)
+
+
+# ============================================================
+# Detached job runner — NOT awaited by the request handler
+# ============================================================
+
+
+async def _run_chat_job(
+    job_id: str,
+    conversation_id: str,
+    llm_messages: list[dict[str, str]],
+    advisor: Any,
+    is_first_turn: bool,
+) -> None:
+    """Runs the LLM call and persists the result. Lives on the app's own
+    event loop — cancelling the HTTP request that spawned it does nothing
+    to this task."""
+    db = SessionLocal()
+    try:
+        reply_text = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: advisor.secure_chat(messages=llm_messages)
+        )
+
+        conversation = (
+            db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        )
+        if conversation is not None:
+            last_user_msg = llm_messages[-1]
+            db.add(
+                Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=reply_text,
+                )
+            )
+            conversation.updated_at = datetime.now(UTC)
+
+            if is_first_turn and conversation.title_is_generated:
+                await _maybe_generate_title(
+                    conversation, advisor, last_user_msg["content"], db
+                )
+
+        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+        if job is not None:
+            job.status = "done"
+            job.result_text = reply_text
+
+        db.commit()
+    except Exception as e:
+        logger.exception("[chat_job] failed | job_id=%s error=%r", job_id, e)
+        try:
+            db.rollback()
+            job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+            if job is not None:
+                job.status = "error"
+                job.error_message = str(e)
+                db.commit()
+        except Exception:
+            logger.exception(
+                "[chat_job] FAILED TO MARK JOB AS ERRORED | job_id=%s", job_id
+            )
+    finally:
+        db.close()
 
 
 # ============================================================
@@ -69,7 +133,6 @@ async def chat(
     data: dict[str, Any] = await request.json()
     conversation_id: str | None = data.get("conversation_id")
     raw_messages: list[dict[str, Any]] = data.get("messages", [])
-    # Optional per-request model → router picks openai vs xai client + prompts.
     advisor = resolve_llm_advisor(data.get("model") if isinstance(data, dict) else None)
 
     if (
@@ -93,16 +156,10 @@ async def chat(
     if not new_messages:
         raise HTTPException(status_code=400, detail="No valid messages provided.")
 
-    last_user_msg: dict[str, str] | None = None
-    for m in reversed(new_messages):
-        if m["role"] == "user":
-            last_user_msg = m
-            break
-    if last_user_msg is None:
-        last_user_msg = new_messages[-1]
+    last_user_msg = next(
+        (m for m in reversed(new_messages) if m["role"] == "user"), new_messages[-1]
+    )
 
-    # Resolve or create the conversation — always scoped to current_user so
-    # nobody can read/append to someone else's chat by guessing an id.
     conversation: Conversation | None = None
     if conversation_id:
         conversation = (
@@ -116,6 +173,7 @@ async def chat(
         if conversation is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+    is_first_turn = conversation is None
     if conversation is None:
         conversation = Conversation(user_id=current_user.id)
         db.add(conversation)
@@ -123,20 +181,7 @@ async def chat(
         db.refresh(conversation)
 
     history = [{"role": m.role, "content": m.content} for m in conversation.messages]
-    llm_messages: list[dict[str, str]] = history + [last_user_msg]
-
-    try:
-        reply_text: str = await run_in_threadpool(
-            advisor.secure_chat, messages=llm_messages
-        )
-    except Exception as e:
-        logger.exception(
-            "[chat] secure_chat failed | id=%s error=%r", conversation.id, e
-        )
-        raise HTTPException(status_code=500, detail=f"LLM chat failed: {e}") from e
-
-    if len(history) == 0:
-        await _maybe_generate_title(conversation, advisor, last_user_msg["content"], db)
+    llm_messages = history + [last_user_msg]
 
     db.add(
         Message(
@@ -145,11 +190,22 @@ async def chat(
             content=last_user_msg["content"],
         )
     )
-    db.add(
-        Message(conversation_id=conversation.id, role="assistant", content=reply_text)
-    )
     conversation.updated_at = datetime.now(UTC)
+
+    job = GenerationJob(
+        conversation_id=conversation.id, user_id=current_user.id, status="running"
+    )
+    db.add(job)
     db.commit()
+    db.refresh(job)
+
+    # KEY LINE: create_task schedules this on the app's event loop as an
+    # independent task. It is NOT a child of this request's coroutine, so
+    # when Starlette cancels the request on client disconnect, this task
+    # is untouched.
+    asyncio.create_task(
+        _run_chat_job(job.id, conversation.id, llm_messages, advisor, is_first_turn)
+    )
 
     audit_log(
         "chat_request",
@@ -161,28 +217,30 @@ async def chat(
         },
     )
 
-    # learning hook
-    if online_learning_dispatcher is not None:
-        try:
-            from src.llm.model_config import get_chat_model
+    return {"conversation_id": conversation.id, "job_id": job.id, "status": "running"}
 
-            evt = ChatTurnEvent(
-                conversation_id=conversation.id,
-                user_message=last_user_msg["content"],
-                assistant_reply=reply_text,
-                num_history_messages=len(history),
-                model_name=(
-                    getattr(advisor.config, "model_name", None)
-                    or getattr(advisor.config, "model", None)
-                    or get_chat_model()
-                ),
-                source="teacher_api.chat",
-            )
-            online_learning_dispatcher.send_chat_turn(evt)
-        except Exception:
-            logger.exception("[chat] learning dispatch failed | id=%s", conversation.id)
 
-    return {"conversation_id": conversation.id, "reply": reply_text}
+@router.get("/chat/jobs/{job_id}")
+async def get_chat_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    job = (
+        db.query(GenerationJob)
+        .filter(GenerationJob.id == job_id, GenerationJob.user_id == current_user.id)
+        .first()
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return {
+        "job_id": job.id,
+        "conversation_id": job.conversation_id,
+        "status": job.status,
+        "reply": job.result_text,
+        "error": job.error_message,
+    }
 
 
 # ============================================================

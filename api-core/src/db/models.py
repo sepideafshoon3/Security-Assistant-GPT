@@ -106,3 +106,31 @@ class Message(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Message id={self.id} role={self.role} conversation_id={self.conversation_id}>"
+
+
+class GenerationJob(Base):
+    """A chat-completion job that runs independently of any single HTTP request."""
+
+    __tablename__ = "generation_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(16), default="running")
+    # "running" | "done" | "error"
+    result_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    __table_args__ = (
+        Index("ix_generation_jobs_conversation_id_status", "conversation_id", "status"),
+    )
