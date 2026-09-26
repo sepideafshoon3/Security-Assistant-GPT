@@ -9,7 +9,9 @@ import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./components/ui/use-mobile";
 import { deriveSeverity } from "./utils/findings";
 import {
-  sendMessageToBackend,
+  startChatJob,
+  waitForChatJob,
+  getActiveJob,
   type BackendChatResponse,
   fetchConversations,
   type BackendConversationSummary,
@@ -153,8 +155,26 @@ export default function App() {
         const backendConvs = await fetchConversations();
         const mapped = backendConvs.map(mapBackendConversationToConversation);
         setConversations(mapped);
+
         if (mapped.length > 0) {
-          setSelectedConversationId(mapped[0].id);
+          const mostRecent = mapped[0];
+          setSelectedConversationId(mostRecent.id);
+
+          // One-time check on load only: was this conversation mid-generation
+          // when the page loaded (e.g. we refreshed while it was answering)?
+          const jobId = await getActiveJob(mostRecent.id);
+          if (jobId) {
+            markProcessing(mostRecent.id);
+            try {
+              const finalStatus = await waitForChatJob(jobId);
+              if (finalStatus.status === "done") {
+                const refreshed = await fetchConversations();
+                setConversations(refreshed.map(mapBackendConversationToConversation));
+              }
+            } finally {
+              unmarkProcessing(mostRecent.id);
+            }
+          }
         }
       } catch (e) {
         console.error(e);
@@ -167,7 +187,6 @@ export default function App() {
 
     load();
   }, [auth.isAuthenticated]);
-
   const handleNewConversation = () => {
     setError(null);
     setErrorRetry(null);
@@ -260,7 +279,15 @@ export default function App() {
 
       setIsLoading(true);
       try {
-        const resp = await sendMessageToBackend(null, trimmed);
+        const started = await startChatJob(null, trimmed);
+        const finalStatus = await waitForChatJob(started.job_id);
+        if (finalStatus.status === "error") {
+          throw new Error(finalStatus.error ?? "Generation failed");
+        }
+        const resp: BackendChatResponse = {
+          conversation_id: finalStatus.conversation_id,
+          reply: finalStatus.reply,
+        };
 
         const backendMessages = mapBackendToMessages(resp);
         const assistantMessages = backendMessages.filter((m) => m.sender === "contact");
@@ -320,7 +347,15 @@ export default function App() {
     markProcessing(current.id);
     setIsLoading(true);
     try {
-      const resp = await sendMessageToBackend(current.id, trimmed);
+      const started = await startChatJob(current.id, trimmed);
+      const finalStatus = await waitForChatJob(started.job_id);
+      if (finalStatus.status === "error") {
+        throw new Error(finalStatus.error ?? "Generation failed");
+      }
+      const resp: BackendChatResponse = {
+        conversation_id: finalStatus.conversation_id,
+        reply: finalStatus.reply,
+      };
 
       const backendMessages = mapBackendToMessages(resp);
       const assistantMessages = backendMessages.filter((m) => m.sender === "contact");

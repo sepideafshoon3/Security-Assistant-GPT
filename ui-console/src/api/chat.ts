@@ -26,19 +26,31 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function sendMessageToBackend(
+export interface JobStartResponse {
+  conversation_id: string;
+  job_id: string;
+  status: "running";
+}
+
+export interface JobStatusResponse {
+  job_id: string;
+  conversation_id: string;
+  status: "running" | "done" | "error";
+  reply?: string;
+  error?: string;
+}
+
+export async function startChatJob(
   conversationId: string | null,
   text: string,
-): Promise<BackendChatResponse> {
-  const payload = {
-    conversation_id: conversationId,
-    messages: [{ role: "user", content: text }],
-  };
-
+): Promise<JobStartResponse> {
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      messages: [{ role: "user", content: text }],
+    }),
   });
 
   if (!res.ok) {
@@ -47,6 +59,51 @@ export async function sendMessageToBackend(
   }
 
   return res.json();
+}
+
+export async function pollChatJob(jobId: string): Promise<JobStatusResponse> {
+  const res = await fetch(`${API_BASE}/chat/jobs/${jobId}`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Job lookup failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function waitForChatJob(
+  jobId: string,
+  opts: { signal?: AbortSignal; maxWaitMs?: number } = {},
+): Promise<JobStatusResponse> {
+  const { signal, maxWaitMs = 10 * 60 * 1000 } = opts; // 10 min hard ceiling
+  const startedAt = Date.now();
+
+  while (true) {
+    if (signal?.aborted) {
+      throw new DOMException("Polling aborted", "AbortError");
+    }
+    if (Date.now() - startedAt > maxWaitMs) {
+      return {
+        job_id: jobId,
+        conversation_id: "",
+        status: "error",
+        error: "Timed out waiting for a response.",
+      };
+    }
+    const status = await pollChatJob(jobId);
+    if (status.status !== "running") return status;
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
+export async function getActiveJob(conversationId: string): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/active-job`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.job_id ?? null;
 }
 
 /* --------- Conversation list --------- */
