@@ -121,6 +121,7 @@ export interface BackendConversationSummary {
   num_messages: number;
   last_updated?: string;
   last_messages: BackendHistoryMessage[];
+  pinned: boolean;
 }
 
 export async function fetchConversations(): Promise<BackendConversationSummary[]> {
@@ -171,4 +172,16 @@ export async function renameConversation(
   }
 
   return res.json();
+}
+
+export async function setConversationPinned(conversationId: string, pinned: boolean) {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to update pin (${res.status}): ${body.slice(0, 200)}`);
+  }
 }

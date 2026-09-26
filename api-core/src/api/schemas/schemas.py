@@ -18,7 +18,8 @@ class ReportResponse(BaseModel):
 
 
 class ConversationRenameRequest(BaseModel):
-    title: str
+    title: str | None = None
+    pinned: bool | None = None
 
 
 class ChatMessage(BaseModel):

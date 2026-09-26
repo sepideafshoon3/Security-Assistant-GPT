@@ -18,6 +18,7 @@ import {
   getFriendlyErrorMessage,
   deleteConversation,
   renameConversation,
+  setConversationPinned, // ← add this
 } from "./api/chat";
 export interface Message {
   id: string;
@@ -60,6 +61,7 @@ function mapBackendConversationToConversation(summary: BackendConversationSummar
     timestamp: fallbackTs,
     messages,
     status: deriveStatus(`${summary.theme || ""} ${lastMessageText}`),
+    pinned: summary.pinned,
   };
 }
 
@@ -250,13 +252,21 @@ export default function App() {
     }
   };
 
-  const handlePinConversation = (conversationId: string) => {
-    // Local-only: there's no `pinned` column or endpoint on the backend yet
-    // (project/folder grouping is a later-week task), so this doesn't
-    // survive a reload. Wire this up to a real PATCH once that lands.
+  const handlePinConversation = async (conversationId: string) => {
+    const target = conversations.find((c) => c.id === conversationId);
+    const next = !target?.pinned;
     setConversations((prev) =>
-      prev.map((c) => (c.id === conversationId ? { ...c, pinned: !c.pinned } : c)),
+      prev.map((c) => (c.id === conversationId ? { ...c, pinned: next } : c)),
     );
+    try {
+      await setConversationPinned(conversationId, next);
+    } catch (err) {
+      console.error(err);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, pinned: !next } : c)),
+      );
+      setError("Couldn't update pin — try again.");
+    }
   };
 
   const handleSendMessage = async (text: string) => {

@@ -54,6 +54,7 @@ class ConversationSummary(BaseModel):
     num_messages: int
     last_updated: datetime | None = None
     last_messages: list[HistoryMessage] = []
+    pinned: bool = False
 
     @field_validator("last_updated", mode="before")
     @classmethod

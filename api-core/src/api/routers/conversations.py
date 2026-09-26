@@ -40,6 +40,7 @@ async def list_conversations(
                 num_messages=len(history),
                 last_updated=conv.updated_at,
                 last_messages=history[-5:],
+                pinned=conv.pinned,
             )
         )
 
@@ -97,7 +98,7 @@ async def delete_conversation(
 
 
 @router.patch("/conversations/{conversation_id}")
-async def rename_conversation(
+async def update_conversation(
     conversation_id: str,
     body: ConversationRenameRequest,
     current_user: User = Depends(get_current_user),
@@ -105,14 +106,16 @@ async def rename_conversation(
 ) -> dict[str, Any]:
     conversation = _get_owned_conversation_or_404(conversation_id, current_user, db)
 
-    new_title = body.title.strip()
-    if not new_title:
-        raise HTTPException(status_code=400, detail="title must not be empty")
+    if body.title is not None:
+        new_title = body.title.strip()
+        if not new_title:
+            raise HTTPException(status_code=400, detail="title must not be empty")
+        conversation.title = new_title[:255]
+        conversation.title_is_generated = False
 
-    conversation.title = new_title[:255]
-    # Renaming is an explicit user choice — stop auto-titling from ever
-    # overwriting it on a later turn.
-    conversation.title_is_generated = False
+    if body.pinned is not None:
+        conversation.pinned = body.pinned
+
     db.commit()
     db.refresh(conversation)
 
@@ -120,4 +123,5 @@ async def rename_conversation(
         "conversation_id": conversation.id,
         "theme": conversation.title,
         "last_updated": conversation.updated_at,
+        "pinned": conversation.pinned,
     }

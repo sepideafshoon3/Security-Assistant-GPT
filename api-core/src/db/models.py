@@ -69,6 +69,8 @@ class Conversation(Base):
         order_by="Message.created_at",
     )
 
+    pinned: Mapped[bool] = mapped_column(default=False)
+
     __table_args__ = (
         Index("ix_conversations_user_id_updated_at", "user_id", "updated_at"),
     )
