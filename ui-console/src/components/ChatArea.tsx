@@ -217,7 +217,7 @@ export function ChatArea({
 
   return (
     <>
-      <main className="flex-1 flex flex-col bg-background relative">
+      <main className="flex-1 min-w-0 flex flex-col bg-background relative">
         <div className="h-16 bg-surface-elevated/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 sm:px-6 shadow-sm gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20">
@@ -254,7 +254,10 @@ export function ChatArea({
                 <h2
                   onDoubleClick={startTitleEdit}
                   title={conversation ? "Double-click to rename" : undefined}
-                  className={cn("text-fg-primary truncate", conversation && "cursor-text")}
+                  className={cn(
+                    "text-fg-primary overflow-x-auto whitespace-nowrap scrollbar-thin",
+                    conversation && "cursor-text",
+                  )}
                 >
                   {conversation ? conversation.title : "New chat"}
                 </h2>
