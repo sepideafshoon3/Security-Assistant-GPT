@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from time import time
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
+from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from src.api.state import (
     chat_memory,
@@ -18,7 +21,7 @@ from src.api.state import (
     resolve_llm_advisor,
 )
 from src.db.models import Conversation, GenerationJob, Message, User
-from src.db.session import SessionLocal, get_db
+from src.db.session import get_db
 from src.learning.online_learning_events import ChatTurnEvent
 from src.security.audit import audit_log
 from src.security.auth import get_current_user
@@ -56,71 +59,84 @@ async def _maybe_generate_title(
         logger.exception("[chat] title generation failed | id=%s", conversation.id)
 
 
-# ============================================================
-# Detached job runner — NOT awaited by the request handler
-# ============================================================
+def _persist_stream_reply(
+    db: Session, conversation: Conversation, content: str
+) -> None:
+    """Save the assistant's reply once a streamed response finishes or is
+    interrupted. Called with whatever text was generated so far in both
+    cases — a stopped generation keeps its partial answer, same as most
+    chat apps do when you hit "stop"."""
+    if not content:
+        return
+    db.add(
+        Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=content,
+        )
+    )
+    conversation.updated_at = datetime.now(UTC)
+    db.commit()
 
 
-async def _run_chat_job(
-    job_id: str,
-    conversation_id: str,
+def _sse(payload: dict[str, Any]) -> bytes:
+    return f"data: {json.dumps(payload)}\n\n".encode()
+
+
+async def _chat_event_stream(
+    conversation: Conversation,
     llm_messages: list[dict[str, str]],
     advisor: Any,
     is_first_turn: bool,
-) -> None:
-    """Runs the LLM call and persists the result. Lives on the app's own
-    event loop — cancelling the HTTP request that spawned it does nothing
-    to this task."""
-    db = SessionLocal()
+    db: Session,
+) -> AsyncIterator[bytes]:
+    """SSE body for POST /chat. Runs the (synchronous, blocking) LLM
+    stream in a threadpool via iterate_in_threadpool so it doesn't block
+    the event loop, forwards each text chunk to the client as it
+    arrives, then persists the full reply and (on the first turn)
+    triggers auto-titling once the stream ends.
+
+    NOTE: this generator's actual behavior on client disconnect
+    (does the except CancelledError branch really fire, does the
+    partial reply really get saved) needs to be verified by testing
+    against a live browser tab close / fetch abort — I can't run a
+    live server here to confirm it. Task 3 (stop button) will exercise
+    this path directly; treat this as provisional until then.
+    """
+    text_parts: list[str] = []
+
+    yield _sse({"type": "start", "conversation_id": conversation.id})
+
     try:
-        reply_text = await asyncio.get_running_loop().run_in_executor(
-            None, lambda: advisor.secure_chat(messages=llm_messages)
-        )
-
-        conversation = (
-            db.query(Conversation).filter(Conversation.id == conversation_id).first()
-        )
-        if conversation is not None:
-            last_user_msg = llm_messages[-1]
-            db.add(
-                Message(
-                    conversation_id=conversation_id,
-                    role="assistant",
-                    content=reply_text,
-                )
-            )
-            conversation.updated_at = datetime.now(UTC)
-
-            if is_first_turn and conversation.title_is_generated:
-                await _maybe_generate_title(
-                    conversation, advisor, last_user_msg["content"], db
-                )
-
-        job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-        if job is not None:
-            job.status = "done"
-            job.result_text = reply_text
-
-        db.commit()
+        sync_stream = advisor.secure_chat_stream(messages=llm_messages)
+        async for piece in iterate_in_threadpool(sync_stream):
+            if not piece:
+                continue
+            text_parts.append(piece)
+            yield _sse({"type": "chunk", "text": piece})
+    except asyncio.CancelledError:
+        _persist_stream_reply(db, conversation, "".join(text_parts).strip())
+        raise
     except Exception as e:
-        logger.exception("[chat_job] failed | job_id=%s error=%r", job_id, e)
-        try:
-            db.rollback()
-            job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
-            if job is not None:
-                job.status = "error"
-                job.error_message = str(e)
-                db.commit()
-        except Exception:
-            logger.exception(
-                "[chat_job] FAILED TO MARK JOB AS ERRORED | job_id=%s", job_id
-            )
-    finally:
-        db.close()
+        logger.exception(
+            "[chat_stream] generation failed | conversation_id=%s", conversation.id
+        )
+        yield _sse({"type": "error", "message": str(e)})
+        return
+
+    full_text = "".join(text_parts).strip()
+    _persist_stream_reply(db, conversation, full_text)
+
+    if is_first_turn and conversation.title_is_generated:
+        await _maybe_generate_title(
+            conversation, advisor, llm_messages[-1]["content"], db
+        )
+
+    yield _sse({"type": "done", "conversation_id": conversation.id})
 
 
 # ============================================================
-# /chat: core chat endpoint
+# /chat: core chat endpoint (SSE streaming)
 # ============================================================
 
 
@@ -129,7 +145,7 @@ async def chat(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> StreamingResponse:
     data: dict[str, Any] = await request.json()
     conversation_id: str | None = data.get("conversation_id")
     raw_messages: list[dict[str, Any]] = data.get("messages", [])
@@ -191,21 +207,7 @@ async def chat(
         )
     )
     conversation.updated_at = datetime.now(UTC)
-
-    job = GenerationJob(
-        conversation_id=conversation.id, user_id=current_user.id, status="running"
-    )
-    db.add(job)
     db.commit()
-    db.refresh(job)
-
-    # KEY LINE: create_task schedules this on the app's event loop as an
-    # independent task. It is NOT a child of this request's coroutine, so
-    # when Starlette cancels the request on client disconnect, this task
-    # is untouched.
-    asyncio.create_task(
-        _run_chat_job(job.id, conversation.id, llm_messages, advisor, is_first_turn)
-    )
 
     audit_log(
         "chat_request",
@@ -217,7 +219,19 @@ async def chat(
         },
     )
 
-    return {"conversation_id": conversation.id, "job_id": job.id, "status": "running"}
+    return StreamingResponse(
+        _chat_event_stream(conversation, llm_messages, advisor, is_first_turn, db),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+# ============================================================
+# Legacy job-status routes — no longer written to by /chat.
+# Left in place (harmless, unused for new chats) until the frontend's
+# poll-based consumer is removed in Task 2; then GenerationJob and
+# these two routes can be deleted together in one cleanup commit.
+# ============================================================
 
 
 @router.get("/chat/jobs/{job_id}")
@@ -263,7 +277,6 @@ async def openai_compatible_chat(
         or getattr(getattr(executor.llm_advisor, "config", None), "model", None)
         or get_chat_model()
     )
-    # Router selects openai vs xai client (and that client selects prompt set).
     advisor = resolve_llm_advisor(body.get("model"))
 
     if (
@@ -303,10 +316,6 @@ async def openai_compatible_chat(
         conversation_id = str(uuid.uuid4())
         history: list[dict[str, str]] = []
     else:
-        # Ownership check: a conversation_id that doesn't exist under THIS
-        # user's own folder is either a typo or someone else's id — either
-        # way, reject it rather than silently starting a fresh history
-        # under an id we don't actually own.
         if not chat_memory.conversation_exists(current_user.id, conversation_id):
             raise HTTPException(status_code=404, detail="Conversation not found")
         try:
@@ -336,7 +345,6 @@ async def openai_compatible_chat(
         assistant_msg={"role": "assistant", "content": reply_text},
     )
 
-    # learning hook (dispatcher)
     if online_learning_dispatcher is not None:
         try:
             evt = ChatTurnEvent(

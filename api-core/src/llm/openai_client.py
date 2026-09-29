@@ -1,5 +1,3 @@
-# src/llm/openai_client.py
-
 import datetime
 import functools
 import json
@@ -2939,34 +2937,33 @@ class OpenAILLMAdvisor:
         )
 
     @log_method
-    def secure_chat(
+    def _prepare_secure_chat_call(
         self,
         messages: list[dict[str, str]],
-        resource_name: str = "resource",
+        resource_name: str,
         *,
-        api_system_prompt: str | None = None,
-        api_user_message: str | None = None,
-    ) -> str:
-        """
-        secure_chat now supports two pass-through messages:
-        - api_system_prompt: injected as a system message (highest risk if untrusted!)
-        - api_user_message: injected as a user message (safer)
+        api_system_prompt: str | None,
+        api_user_message: str | None,
+    ) -> tuple[str | None, list[dict[str, Any]] | None, str | None, int | None, float]:
+        """Shared setup for secure_chat() and secure_chat_stream().
+
+        Returns (short_circuit_text, all_msgs, model_name, max_out, chat_t0).
+        When short_circuit_text is not None (client disabled, or a
+        "/planner ..." shortcut matched), the caller should return/yield
+        that text directly and skip the LLM call entirely.
         """
         _chat_t0 = time.monotonic()  # wall-clock start for the entire chat
 
         if not self.config.enabled or self.client is None:
             audit_log("llm_chat_disabled", {"reason": "no_client"})
-            return "LLM chat is disabled or unavailable."
-        # -----------------------------------------------------------------
-        # 2️⃣  Planner shortcut – if a user sent “/planner …”, short‑circuit
-        # -----------------------------------------------------------------
+            return "LLM chat is disabled or unavailable.", None, None, None, _chat_t0
+
         planner_result = self._handle_planner_command(messages)
         if planner_result is not None:
-            # Return the planner output directly, skipping the normal LLM flow
-            return planner_result
+            return planner_result, None, None, None, _chat_t0
+
         # ---- daily file log: full request (messages + metadata) ----
         try:
-            # Serialize full messages (cap each message at 50 KB for safety)
             safe_messages = []
             for m in messages or []:
                 sm = dict(m)
@@ -3011,22 +3008,13 @@ class OpenAILLMAdvisor:
         except Exception:
             pass
 
-        # -----------------------------------------------------------------
-        # 3️⃣  Sanitize any injected API messages (unchanged)
-        # -----------------------------------------------------------------
         api_system_prompt = self._clean_inbound_text(api_system_prompt or "")
         api_user_message = self._clean_inbound_text(
             (api_system_prompt or "") + (api_user_message or "")
         )
 
-        # dark_recon context (optional layer input; always eligible on secure_chat)
         dark_recon_ctx = load_latest_dark_recon_summary(BASE_DIR / "data")
 
-        # ---------------------------------------------------------------
-        # secure_chat always uses the full security multi-layer stack.
-        # Every registered prompt layer is composed and sent (no slim /
-        # general path, no single-message merge).
-        # ---------------------------------------------------------------
         self._log.info(
             "[secure_chat] query_mode=security layer_mode=multi messages=%d model=%s",
             len(messages or []),
@@ -3041,7 +3029,6 @@ class OpenAILLMAdvisor:
         )
 
         model_name = self._get_model_name()
-        # Cap completion budget: huge values confuse providers / waste time
         max_out = max(1, min(int(self.config.max_tokens or 4096), 8192))
         sys_count = sum(1 for m in all_msgs if m.get("role") == "system")
         approx_chars = sum(len(str(m.get("content") or "")) for m in all_msgs)
@@ -3054,6 +3041,32 @@ class OpenAILLMAdvisor:
             max_out,
             self._should_use_responses_api(model_name),
         )
+
+        return None, all_msgs, model_name, max_out, _chat_t0
+
+    def secure_chat(
+        self,
+        messages: list[dict[str, str]],
+        resource_name: str = "resource",
+        *,
+        api_system_prompt: str | None = None,
+        api_user_message: str | None = None,
+    ) -> str:
+        """
+        secure_chat now supports two pass-through messages:
+        - api_system_prompt: injected as a system message (highest risk if untrusted!)
+        - api_user_message: injected as a user message (safer)
+        """
+        short_circuit, all_msgs, model_name, max_out, _chat_t0 = (
+            self._prepare_secure_chat_call(
+                messages,
+                resource_name,
+                api_system_prompt=api_system_prompt,
+                api_user_message=api_user_message,
+            )
+        )
+        if short_circuit is not None:
+            return short_circuit
 
         if self._should_use_responses_api(model_name):
             instructions_parts: list[str] = []
@@ -3309,6 +3322,132 @@ class OpenAILLMAdvisor:
 
         normalized = self._normalize_code_blocks(content or "")
         return normalized.strip()
+
+    def secure_chat_stream(
+        self,
+        messages: list[dict[str, str]],
+        resource_name: str = "resource",
+        *,
+        api_system_prompt: str | None = None,
+        api_user_message: str | None = None,
+    ) -> Iterator[str]:
+        """Streaming counterpart to secure_chat(). Yields text chunks as
+        they arrive. Does the same setup/logging as secure_chat(); the
+        only difference is stream=True on the underlying API call.
+
+        Does not replicate secure_chat()'s tool-call loop — it's inert
+        there too (no tool schemas are attached), so there's nothing to
+        stream through today. Re-enabling tools later will need real
+        work here to buffer/execute tool-call deltas before resuming
+        the text stream.
+        """
+        short_circuit, all_msgs, model_name, max_out, _chat_t0 = (
+            self._prepare_secure_chat_call(
+                messages,
+                resource_name,
+                api_system_prompt=api_system_prompt,
+                api_user_message=api_user_message,
+            )
+        )
+        if short_circuit is not None:
+            yield short_circuit
+            return
+
+        text_parts: list[str] = []
+
+        if self._should_use_responses_api(model_name):
+            instructions_parts: list[str] = []
+            input_msgs: list[dict[str, Any]] = []
+            for m in all_msgs:
+                if m.get("role") == "system":
+                    instructions_parts.append(m.get("content", ""))
+                input_msgs.append(m)
+            instructions = "\n\n".join(instructions_parts).strip()
+
+            create_kwargs: dict[str, Any] = {
+                "model": model_name,
+                "instructions": instructions,
+                "input": input_msgs,
+                "max_output_tokens": max_out,
+                "stream": True,
+            }
+            if self._backend_supports_reasoning():
+                create_kwargs["reasoning"] = {"effort": "high", "summary": "auto"}
+            if self._responses_supports_sampling(model_name):
+                create_kwargs["temperature"] = self.config.temperature
+                create_kwargs["top_p"] = self.config.top_p
+
+            self._log.info(
+                "[secure_chat_stream] calling responses.create(stream=True) | "
+                "model=%s max_output_tokens=%d",
+                model_name,
+                max_out,
+            )
+            for ev in self.client.responses.create(**create_kwargs):
+                if self._get(ev, "type", None) == "response.output_text.delta":
+                    delta = self._get(ev, "delta", "")
+                    if delta:
+                        text_parts.append(delta)
+                        yield delta
+                # Reasoning-summary deltas intentionally not forwarded.
+
+            content = "".join(text_parts)
+            _chat_total_ms = round((time.monotonic() - _chat_t0) * 1000, 2)
+            self._log_llm_interaction(
+                layer="secure_chat_stream",
+                api="responses",
+                model=model_name,
+                output_text=content,
+                extra={
+                    "resource": resource_name,
+                    "stage": "final",
+                    "total_chat_ms": _chat_total_ms,
+                },
+                elapsed_ms=_chat_total_ms,
+            )
+            return
+
+        chat_create_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": all_msgs,
+            "temperature": self.config.temperature,
+            "top_p": self.config.top_p,
+            "max_tokens": max_out,
+            "stream": True,
+        }
+        self._log.info(
+            "[secure_chat_stream] calling chat.completions.create(stream=True) | "
+            "model=%s messages=%d max_tokens=%d",
+            model_name,
+            len(all_msgs),
+            max_out,
+        )
+        for chunk in self.client.chat.completions.create(**chat_create_kwargs):
+            choices = self._get(chunk, "choices", None)
+            if not choices:
+                continue
+            delta_obj = self._get(choices[0], "delta", None)
+            if delta_obj is None:
+                continue
+            piece = self._get(delta_obj, "content", None)
+            if piece:
+                text_parts.append(piece)
+                yield piece
+
+        content = "".join(text_parts)
+        _chat_total_ms = round((time.monotonic() - _chat_t0) * 1000, 2)
+        self._log_llm_interaction(
+            layer="secure_chat_stream",
+            api="chat.completions",
+            model=model_name,
+            output_text=content,
+            extra={
+                "resource": resource_name,
+                "stage": "final",
+                "total_chat_ms": _chat_total_ms,
+            },
+            elapsed_ms=_chat_total_ms,
+        )
 
     @log_method
     def create_thread(
