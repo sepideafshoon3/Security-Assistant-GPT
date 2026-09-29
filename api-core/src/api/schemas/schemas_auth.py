@@ -20,3 +20,21 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+class EmailCheckRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyCodeRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+
+
+class CompleteSignupRequest(BaseModel):
+    signup_token: str
+    password: str
+
+
+class SignupTokenResponse(BaseModel):
+    signup_token: str

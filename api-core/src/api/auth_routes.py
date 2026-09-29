@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.api.schemas.schemas_auth import (
+from api.schemas.schemas_auth import (
     AuthResponse,
     LoginRequest,
     SignupRequest,
@@ -22,62 +20,93 @@ from src.security.auth import (
     verify_password,
 )
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post(
-    "/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+    "/signup",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
 )
-def signup(body: SignupRequest, db: Session = Depends(get_db)) -> AuthResponse:
+def signup(
+    body: SignupRequest,
+    db: Session = Depends(get_db),
+) -> AuthResponse:
     normalized_email = body.email.lower()
 
     existing = db.query(User).filter(User.email == normalized_email).first()
     if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
         )
 
-    user = User(email=normalized_email, password_hash=hash_password(body.password))
+    user = User(
+        email=normalized_email,
+        password_hash=hash_password(body.password),
+    )
     db.add(user)
+
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
         ) from None
+
     db.refresh(user)
 
     audit_log("auth_signup", {"user_id": user.id})
 
     token = create_access_token(user_id=user.id)
+
     return AuthResponse(
         access_token=token,
-        user=UserPublic(id=user.id, email=user.email),
+        user=UserPublic(
+            id=user.id,
+            email=user.email,
+        ),
     )
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
+def login(
+    body: LoginRequest,
+    db: Session = Depends(get_db),
+) -> AuthResponse:
     normalized_email = body.email.lower()
 
     user = db.query(User).filter(User.email == normalized_email).first()
-    if user is None or not verify_password(body.password, user.password_hash):
+
+    if user is None or not verify_password(
+        body.password,
+        user.password_hash,
+    ):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
         )
 
     audit_log("auth_login", {"user_id": user.id})
 
     token = create_access_token(user_id=user.id)
+
     return AuthResponse(
         access_token=token,
-        user=UserPublic(id=user.id, email=user.email),
+        user=UserPublic(
+            id=user.id,
+            email=user.email,
+        ),
     )
 
 
 @router.get("/me", response_model=UserPublic)
-def me(current_user: User = Depends(get_current_user)) -> UserPublic:
-    return UserPublic(id=current_user.id, email=current_user.email)
+def me(
+    current_user: User = Depends(get_current_user),
+) -> UserPublic:
+    return UserPublic(
+        id=current_user.id,
+        email=current_user.email,
+    )

@@ -126,3 +126,31 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
     return user
+
+
+def create_signup_token(email: str) -> str:
+    now = datetime.now(UTC)
+    payload = {
+        "email": email,
+        "purpose": "signup",
+        "iat": now,
+        "exp": now + timedelta(minutes=15),
+    }
+    return jwt.encode(payload, _get_jwt_secret(), algorithm=_get_jwt_algorithm())
+
+
+def decode_signup_token(token: str) -> str:
+    try:
+        payload = jwt.decode(
+            token, _get_jwt_secret(), algorithms=[_get_jwt_algorithm()]
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401, detail="Code verification expired — start again"
+        ) from None
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token") from None
+
+    if payload.get("purpose") != "signup" or not payload.get("email"):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return payload["email"]

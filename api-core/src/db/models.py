@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -136,3 +137,14 @@ class GenerationJob(Base):
     __table_args__ = (
         Index("ix_generation_jobs_conversation_id_status", "conversation_id", "status"),
     )
+
+
+class EmailVerification(Base):
+    __tablename__ = "email_verifications"
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=lambda: str(uuid4()))
+    email: Mapped[str] = mapped_column(index=True)
+    code_hash: Mapped[str] = mapped_column()
+    attempts: Mapped[int] = mapped_column(default=0)
+    expires_at: Mapped[datetime] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
