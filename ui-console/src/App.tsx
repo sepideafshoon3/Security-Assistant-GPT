@@ -173,14 +173,18 @@ export default function App() {
         setConversations(mapped);
 
         if (mapped.length > 0) {
-          const mostRecent = mapped[0];
-          setSelectedConversationId(mostRecent.id);
+          setSelectedConversationId(mapped[0].id);
+        }
 
-          // One-time check on load only: was this conversation mid-generation
-          // when the page loaded (e.g. we refreshed while it was answering)?
-          const jobId = await getActiveJob(mostRecent.id);
-          if (jobId) {
-            markProcessing(mostRecent.id);
+        // Check every loaded conversation for a job that was still running when we
+        // refreshed — not just the most recent one. More than one conversation can
+        // be mid-generation at once. Each check runs independently so one slow
+        // job doesn't block the others (or block the initial page load).
+        mapped.forEach((conv) => {
+          (async () => {
+            const jobId = await getActiveJob(conv.id);
+            if (!jobId) return;
+            markProcessing(conv.id);
             try {
               const finalStatus = await waitForChatJob(jobId);
               if (finalStatus.status === "done") {
@@ -192,10 +196,10 @@ export default function App() {
                 );
               }
             } finally {
-              unmarkProcessing(mostRecent.id);
+              unmarkProcessing(conv.id);
             }
-          }
-        }
+          })();
+        });
       } catch (e) {
         console.error(e);
         setError(getFriendlyErrorMessage(e));

@@ -89,26 +89,26 @@ export function LoginModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="login-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-sm relative rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950 shadow-2xl shadow-black/40 p-6 sm:p-8">
+      <div className="w-full max-w-md relative rounded-[32px] border border-white/25 dark:border-white/10 bg-white/60 dark:bg-surface-panel/50 backdrop-blur-2xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_0_0_1px_var(--accent-soft),0_24px_60px_-12px_rgba(0,0,0,0.35),0_0_40px_-8px_var(--accent-glow)] p-8 sm:p-10 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 duration-200">
         <button
           type="button"
           onClick={onClose}
           aria-label="بستن"
-          className="absolute top-3 left-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+          className="absolute top-4 left-4 w-8 h-8 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/10 border border-black/5 dark:border-white/10 text-fg-tertiary hover:text-fg-primary hover:bg-black/10 dark:hover:bg-white/15 transition-colors"
         >
           <X className="w-4 h-4" aria-hidden />
         </button>
 
-        <div className="flex flex-col items-center text-center gap-2 mb-6">
-          <div className="w-12 h-12 bg-gradient-to-br from-brand-cyan to-brand-green rounded-xl flex items-center justify-center shadow-lg shadow-brand-cyan/50 mb-1">
-            <ShieldCheck className="w-6 h-6 text-black" aria-hidden />
+        <div className="flex flex-col items-center text-center gap-2 mb-8">
+          <div className="w-16 h-16 bg-gradient-to-br from-brand-cyan to-brand-green rounded-2xl flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_24px_-6px_var(--accent-glow)] ring-1 ring-white/30 mb-2">
+            <ShieldCheck className="w-8 h-8 text-black" aria-hidden />
           </div>
-          <h1 id="login-modal-title" className="text-lg text-slate-900 dark:text-gray-100">
+          <h1 id="login-modal-title" className="text-xl text-slate-900 dark:text-gray-100">
             {mode === "login" ? "ورود به حساب" : "ساخت حساب جدید"}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -118,9 +118,12 @@ export function LoginModal({
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="relative flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="modal-email" className="text-sm text-slate-700 dark:text-slate-300">
+            <label
+              htmlFor="modal-email"
+              className="text-sm text-slate-700 dark:text-slate-300 px-1"
+            >
               ایمیل
             </label>
             <input
@@ -132,12 +135,15 @@ export function LoginModal({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               disabled={isSubmitting}
-              className="h-9 w-full rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 text-sm text-slate-900 dark:text-gray-100 outline-none focus-visible:ring-2 focus-visible:ring-accent-hover disabled:opacity-50"
+              className="h-11 w-full rounded-xl border border-black/10 dark:border-white/15 bg-white/50 dark:bg-white/5 backdrop-blur-sm px-3.5 text-sm text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-white/30 outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:bg-white/80 dark:focus-visible:bg-white/10 transition-colors disabled:opacity-50"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="modal-password" className="text-sm text-slate-700 dark:text-slate-300">
+            <label
+              htmlFor="modal-password"
+              className="text-sm text-slate-700 dark:text-slate-300 px-1"
+            >
               رمز عبور
             </label>
             <input
@@ -148,12 +154,12 @@ export function LoginModal({
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               disabled={isSubmitting}
-              className="h-9 w-full rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 text-sm text-slate-900 dark:text-gray-100 outline-none focus-visible:ring-2 focus-visible:ring-accent-hover disabled:opacity-50"
+              className="h-11 w-full rounded-xl border border-black/10 dark:border-white/15 bg-white/50 dark:bg-white/5 backdrop-blur-sm px-3.5 text-sm text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-white/30 outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:bg-white/80 dark:focus-visible:bg-white/10 transition-colors disabled:opacity-50"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-500 dark:text-red-400" role="alert">
+            <p className="text-sm text-red-500 dark:text-red-400 px-1" role="alert">
               {error}
             </p>
           )}
@@ -161,7 +167,7 @@ export function LoginModal({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="mt-2 h-9 w-full rounded-md bg-gradient-to-r from-brand-cyan to-brand-green text-black text-sm font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50 disabled:pointer-events-none"
+            className="mt-2 h-11 w-full rounded-xl bg-gradient-to-r from-brand-cyan to-brand-green text-black text-sm font-medium flex items-center justify-center gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_20px_-6px_var(--accent-glow)] hover:opacity-90 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_8px_28px_-4px_var(--accent-glow)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none"
           >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden />

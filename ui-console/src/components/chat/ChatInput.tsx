@@ -126,7 +126,7 @@ export function ChatInput({
 
       <form
         onSubmit={onSubmit}
-        className="flex items-center gap-3 rounded-3xl bg-surface-panel/80 backdrop-blur-xl p-2 pl-5 ring-1 ring-accent-hover/20 shadow-[0_0_0_1px_var(--accent-soft),0_12px_40px_-8px_rgba(0,0,0,0.3),0_0_24px_-4px_var(--accent-glow)] transition-shadow focus-within:ring-accent-hover/40 focus-within:shadow-[0_0_0_1px_var(--accent-soft),0_12px_40px_-8px_rgba(0,0,0,0.3),0_0_32px_-2px_var(--accent-glow)]"
+        className="flex items-center gap-3 rounded-3xl bg-surface-panel/55 backdrop-blur-2xl p-2 pl-5 ring-1 ring-accent-hover/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_0_1px_var(--accent-soft),0_12px_40px_-8px_rgba(0,0,0,0.3),0_0_24px_-4px_var(--accent-glow)] transition-shadow focus-within:ring-accent-hover/40 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_0_0_1px_var(--accent-soft),0_12px_40px_-8px_rgba(0,0,0,0.3),0_0_32px_-2px_var(--accent-glow)]"
       >
         <input
           ref={fileInputRef}

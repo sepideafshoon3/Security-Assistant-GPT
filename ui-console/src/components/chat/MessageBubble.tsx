@@ -36,10 +36,10 @@ export function MessageBubble({
       {!isUser && <FindingsBadge text={message.text} />}
       <div
         className={cn(
-          "max-w-[88%] sm:max-w-[70%] min-w-0 break-words rounded-2xl px-4 sm:px-5 py-3.5 transition-all",
+          "max-w-[88%] sm:max-w-[70%] min-w-0 break-words rounded-2xl px-4 sm:px-5 py-3.5 backdrop-blur-xl transition-all",
           isUser
-            ? "bg-accent text-white shadow-lg shadow-accent/20"
-            : "bg-surface-elevated border border-border text-fg-primary shadow-md",
+            ? "bg-accent/70 text-white border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_8px_24px_-6px_var(--accent-glow)]"
+            : "bg-gradient-to-br from-white/85 to-surface-deep/90 dark:from-transparent dark:to-transparent dark:bg-white/[0.07] backdrop-blur-xl backdrop-saturate-150 border border-black/[0.06] dark:border-white/15 text-fg-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-8px_rgba(15,23,42,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_0_1px_rgba(255,255,255,0.03),0_8px_24px_-6px_rgba(0,0,0,0.5),0_0_20px_-6px_var(--accent-glow)]",
           message.failed && "ring-2 ring-status-danger/60",
         )}
       >
