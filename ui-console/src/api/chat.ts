@@ -26,24 +26,30 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export interface JobStartResponse {
-  conversation_id: string;
-  job_id: string;
-  status: "running";
-}
+/* --------- Streaming chat (SSE over fetch) --------- */
 
-export interface JobStatusResponse {
-  job_id: string;
-  conversation_id: string;
-  status: "running" | "done" | "error";
-  reply?: string;
-  error?: string;
-}
+export type ChatStreamEvent =
+  | { type: "start"; conversation_id: string }
+  | { type: "chunk"; text: string }
+  | { type: "done"; conversation_id: string }
+  | { type: "error"; message: string };
 
-export async function startChatJob(
+/**
+ * POSTs to /chat and reads back a text/event-stream body, calling onEvent
+ * once per parsed SSE frame as it arrives. Uses fetch + ReadableStream
+ * rather than EventSource because EventSource can't send our auth header
+ * or a POST body.
+ *
+ * opts.signal is accepted now (for Task 3's stop button) but nothing in
+ * this app passes one yet — an aborted fetch will simply reject this
+ * promise, which the caller's try/catch already handles.
+ */
+export async function streamChat(
   conversationId: string | null,
   text: string,
-): Promise<JobStartResponse> {
+  onEvent: (event: ChatStreamEvent) => void,
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -51,59 +57,48 @@ export async function startChatJob(
       conversation_id: conversationId,
       messages: [{ role: "user", content: text }],
     }),
+    signal: opts.signal,
   });
 
-  if (!res.ok) {
-    const body = await res.text();
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
     throw new Error(`Chat request failed (${res.status}): ${body.slice(0, 200)}`);
   }
 
-  return res.json();
-}
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
 
-export async function pollChatJob(jobId: string): Promise<JobStatusResponse> {
-  const res = await fetch(`${API_BASE}/chat/jobs/${jobId}`, {
-    headers: { ...authHeaders() },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Job lookup failed (${res.status}): ${body.slice(0, 200)}`);
-  }
-  return res.json();
-}
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-export async function waitForChatJob(
-  jobId: string,
-  opts: { signal?: AbortSignal; maxWaitMs?: number } = {},
-): Promise<JobStatusResponse> {
-  const { signal, maxWaitMs = 10 * 60 * 1000 } = opts; // 10 min hard ceiling
-  const startedAt = Date.now();
+      // SSE frames are separated by a blank line. A read() chunk can land
+      // mid-frame, so only consume complete frames and keep the remainder
+      // buffered for the next read.
+      let sepIndex: number;
+      while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+        const rawFrame = buffer.slice(0, sepIndex);
+        buffer = buffer.slice(sepIndex + 2);
 
-  while (true) {
-    if (signal?.aborted) {
-      throw new DOMException("Polling aborted", "AbortError");
+        const dataLine = rawFrame.split("\n").find((line) => line.startsWith("data: "));
+        if (!dataLine) continue;
+
+        let event: ChatStreamEvent;
+        try {
+          event = JSON.parse(dataLine.slice("data: ".length));
+        } catch (err) {
+          console.error("[streamChat] failed to parse SSE frame:", dataLine, err);
+          continue;
+        }
+        onEvent(event);
+      }
     }
-    if (Date.now() - startedAt > maxWaitMs) {
-      return {
-        job_id: jobId,
-        conversation_id: "",
-        status: "error",
-        error: "Timed out waiting for a response.",
-      };
-    }
-    const status = await pollChatJob(jobId);
-    if (status.status !== "running") return status;
-    await new Promise((r) => setTimeout(r, 1500));
+  } finally {
+    reader.releaseLock();
   }
-}
-
-export async function getActiveJob(conversationId: string): Promise<string | null> {
-  const res = await fetch(`${API_BASE}/conversations/${conversationId}/active-job`, {
-    headers: { ...authHeaders() },
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.job_id ?? null;
 }
 
 /* --------- Conversation list --------- */

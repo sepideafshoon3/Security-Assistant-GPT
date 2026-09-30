@@ -9,16 +9,13 @@ import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./components/ui/use-mobile";
 import { deriveSeverity } from "./utils/findings";
 import {
-  startChatJob,
-  waitForChatJob,
-  getActiveJob,
-  type BackendChatResponse,
+  streamChat,
   fetchConversations,
   type BackendConversationSummary,
   getFriendlyErrorMessage,
   deleteConversation,
   renameConversation,
-  setConversationPinned, // ← add this
+  setConversationPinned,
 } from "./api/chat";
 export interface Message {
   id: string;
@@ -35,7 +32,7 @@ export interface Conversation {
   timestamp: Date;
   messages: Message[];
   status?: "clean" | "findings" | "critical"; // TODO: source from backend scan results
-  pinned?: boolean; // TODO: local-only for now — no backend field/endpoint yet (see handlePinConversation)
+  pinned?: boolean;
 }
 
 function deriveStatus(text: string): Conversation["status"] {
@@ -63,32 +60,6 @@ function mapBackendConversationToConversation(summary: BackendConversationSummar
     status: deriveStatus(`${summary.theme || ""} ${lastMessageText}`),
     pinned: summary.pinned,
   };
-}
-
-function mapBackendToMessages(resp: BackendChatResponse): Message[] {
-  const now = Date.now();
-
-  if (resp.messages && Array.isArray(resp.messages) && resp.messages.length > 0) {
-    return resp.messages.map((m, index) => ({
-      id: `m-${now}-${index}`,
-      text: m.content,
-      sender: m.role === "user" ? "user" : "contact",
-      timestamp: new Date(),
-    }));
-  }
-
-  if (resp.reply) {
-    return [
-      {
-        id: `m-${now}-0`,
-        text: resp.reply,
-        sender: "contact",
-        timestamp: new Date(),
-      },
-    ];
-  }
-
-  return [];
 }
 
 export default function App() {
@@ -154,15 +125,11 @@ export default function App() {
       setIsLoading(true);
       setError(null);
       try {
-        // AFTER
         const backendConvs = await fetchConversations();
 
         // Clear out abandoned empty chats (e.g. a conversation row that got
         // created but never received a message, such as a request that was
-        // interrupted before it could persist anything). A conversation with
-        // a job still in flight always has at least its user message saved
-        // by now, so num_messages === 0 here genuinely means "nothing to
-        // show" rather than "still working."
+        // interrupted before it could persist anything).
         const empty = backendConvs.filter((c) => c.num_messages === 0);
         const nonEmpty = backendConvs.filter((c) => c.num_messages > 0);
         if (empty.length > 0) {
@@ -176,30 +143,11 @@ export default function App() {
           setSelectedConversationId(mapped[0].id);
         }
 
-        // Check every loaded conversation for a job that was still running when we
-        // refreshed — not just the most recent one. More than one conversation can
-        // be mid-generation at once. Each check runs independently so one slow
-        // job doesn't block the others (or block the initial page load).
-        mapped.forEach((conv) => {
-          (async () => {
-            const jobId = await getActiveJob(conv.id);
-            if (!jobId) return;
-            markProcessing(conv.id);
-            try {
-              const finalStatus = await waitForChatJob(jobId);
-              if (finalStatus.status === "done") {
-                const refreshed = await fetchConversations();
-                setConversations(
-                  refreshed
-                    .filter((c) => c.num_messages > 0)
-                    .map(mapBackendConversationToConversation),
-                );
-              }
-            } finally {
-              unmarkProcessing(conv.id);
-            }
-          })();
-        });
+        // No more "was a job still running when we refreshed" recovery
+        // here: /chat is a live SSE stream now, tied to one request's
+        // lifetime. If the tab reloads mid-stream, that reply is gone —
+        // same trade-off ChatGPT makes, and the alternative (resuming a
+        // stream after reload) is real scope, not a page-load nicety.
       } catch (e) {
         console.error(e);
         setError(getFriendlyErrorMessage(e));
@@ -293,137 +241,120 @@ export default function App() {
     };
 
     const current = selectedConversation;
+    const isNewConversation = !current;
+    const localId = current?.id ?? `tmp-${Date.now()}`;
+    // Mutable across the whole send: starts as localId, and for a brand
+    // new conversation gets swapped to the backend's real id as soon as
+    // the "start" SSE frame arrives (before any text has streamed in).
+    let activeId = localId;
 
-    if (!current) {
-      const tempId = `tmp-${Date.now()}`;
-
+    if (isNewConversation) {
       const tempConv: Conversation = {
-        id: tempId,
+        id: localId,
         title: "New Conversation",
         lastMessage: trimmed,
         timestamp: now,
         messages: [userMessage],
       };
-
       setConversations((prev) => [...prev, tempConv]);
-      setSelectedConversationId(tempId);
-      markProcessing(tempId);
-
-      setIsLoading(true);
-      try {
-        const started = await startChatJob(null, trimmed);
-        const finalStatus = await waitForChatJob(started.job_id);
-        if (finalStatus.status === "error") {
-          throw new Error(finalStatus.error ?? "Generation failed");
-        }
-
-        // Pull the real record back from the backend instead of guessing at
-        // it client-side: the title here may be an auto-generated one (see
-        // _maybe_generate_title on the backend), so a hardcoded placeholder
-        // would only ever show the right name after a manual refresh.
-        const refreshed = await fetchConversations();
-        const finalSummary = refreshed.find(
-          (c) => c.conversation_id === finalStatus.conversation_id,
-        );
-        const finalConv: Conversation = finalSummary
-          ? mapBackendConversationToConversation(finalSummary)
-          : {
-              id: finalStatus.conversation_id,
-              title: "Conversation",
-              lastMessage: finalStatus.reply || trimmed,
-              timestamp: new Date(),
-              messages: [
-                userMessage,
-                ...mapBackendToMessages({
-                  conversation_id: finalStatus.conversation_id,
-                  reply: finalStatus.reply,
-                }),
-              ],
-            };
-
-        setConversations((prev) => {
-          const others = prev.filter((c) => c.id !== tempId);
-          return [...others, finalConv];
-        });
-        setSelectedConversationId(finalStatus.conversation_id);
-      } catch (e) {
-        console.error(e);
-        const friendly = getFriendlyErrorMessage(e);
-        setError(friendly);
-        setErrorRetry(() => () => handleSendMessage(trimmed));
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === tempId
-              ? {
-                  ...c,
-                  messages: c.messages.map((m) =>
-                    m.id === userMessage.id ? { ...m, failed: true } : m,
-                  ),
-                }
-              : c,
-          ),
-        );
-      } finally {
-        setIsLoading(false);
-        unmarkProcessing(tempId);
-      }
-
-      return;
-    }
-
-    setConversations((prev) =>
-      prev.map((conv) =>
-        conv.id === current.id
-          ? {
-              ...conv,
-              messages: [...conv.messages, userMessage],
-              lastMessage: trimmed,
-              timestamp: now,
-            }
-          : conv,
-      ),
-    );
-
-    markProcessing(current.id);
-    setIsLoading(true);
-    try {
-      const started = await startChatJob(current.id, trimmed);
-      const finalStatus = await waitForChatJob(started.job_id);
-      if (finalStatus.status === "error") {
-        throw new Error(finalStatus.error ?? "Generation failed");
-      }
-      const resp: BackendChatResponse = {
-        conversation_id: finalStatus.conversation_id,
-        reply: finalStatus.reply,
-      };
-
-      const backendMessages = mapBackendToMessages(resp);
-      const assistantMessages = backendMessages.filter((m) => m.sender === "contact");
-      const lastAssistantText =
-        assistantMessages[assistantMessages.length - 1]?.text || current.lastMessage;
-
+      setSelectedConversationId(localId);
+    } else {
       setConversations((prev) =>
         prev.map((conv) =>
-          conv.id === current.id
+          conv.id === localId
             ? {
                 ...conv,
-                id: resp.conversation_id,
-                messages: [...conv.messages, ...assistantMessages],
-                lastMessage: lastAssistantText,
-                timestamp: new Date(),
+                messages: [...conv.messages, userMessage],
+                lastMessage: trimmed,
+                timestamp: now,
               }
             : conv,
         ),
       );
-      setSelectedConversationId(resp.conversation_id);
+    }
+
+    markProcessing(localId);
+    setIsLoading(true);
+
+    const assistantMessageId = `m-${Date.now()}-assistant`;
+    let assistantInserted = false;
+    let assistantText = "";
+
+    const appendAssistantChunk = (piece: string) => {
+      assistantText += piece;
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== activeId) return conv;
+          if (!assistantInserted) {
+            return {
+              ...conv,
+              messages: [
+                ...conv.messages,
+                {
+                  id: assistantMessageId,
+                  text: assistantText,
+                  sender: "contact" as const,
+                  timestamp: new Date(),
+                },
+              ],
+              lastMessage: assistantText,
+            };
+          }
+          return {
+            ...conv,
+            messages: conv.messages.map((m) =>
+              m.id === assistantMessageId ? { ...m, text: assistantText } : m,
+            ),
+            lastMessage: assistantText,
+          };
+        }),
+      );
+      assistantInserted = true;
+    };
+
+    try {
+      await streamChat(current?.id ?? null, trimmed, (event) => {
+        if (event.type === "start") {
+          if (isNewConversation) {
+            const realId = event.conversation_id;
+            setConversations((prev) =>
+              prev.map((conv) => (conv.id === localId ? { ...conv, id: realId } : conv)),
+            );
+            setSelectedConversationId(realId);
+            markProcessing(realId);
+            unmarkProcessing(localId);
+            activeId = realId;
+          }
+        } else if (event.type === "chunk") {
+          appendAssistantChunk(event.text);
+        } else if (event.type === "error") {
+          throw new Error(event.message);
+        }
+        // "done" needs no handling here — the try block below falls
+        // through once streamChat's promise resolves.
+      });
+
+      setIsLoading(false);
+
+      if (isNewConversation) {
+        // Pick up the auto-generated title now that the backend has had a
+        // chance to set one (see _maybe_generate_title on the backend).
+        const refreshed = await fetchConversations();
+        const finalSummary = refreshed.find((c) => c.conversation_id === activeId);
+        if (finalSummary) {
+          const finalConv = mapBackendConversationToConversation(finalSummary);
+          setConversations((prev) => prev.map((conv) => (conv.id === activeId ? finalConv : conv)));
+        }
+      }
     } catch (e) {
       console.error(e);
       const friendly = getFriendlyErrorMessage(e);
       setError(friendly);
       setErrorRetry(() => () => handleSendMessage(trimmed));
+      setIsLoading(false);
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === current.id
+          c.id === activeId
             ? {
                 ...c,
                 messages: c.messages.map((m) =>
@@ -434,8 +365,8 @@ export default function App() {
         ),
       );
     } finally {
-      setIsLoading(false);
-      unmarkProcessing(current.id);
+      unmarkProcessing(localId);
+      if (activeId !== localId) unmarkProcessing(activeId);
     }
   };
 
