@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen, ShieldCheck, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ConversationList } from "./components/ConversationList";
 import { ChatArea } from "./components/ChatArea";
 import { ErrorBanner } from "./components/ErrorBanner";
@@ -94,6 +94,15 @@ export default function App() {
   const [processingConversationIds, setProcessingConversationIds] = useState<Set<string>>(
     new Set(),
   );
+  // Keyed by whatever conversation id is "live" at the time (see the id
+  // swap in handleSendMessage for a brand-new conversation) — lets the
+  // Stop button abort the right in-flight stream even if more than one
+  // conversation is generating at once.
+  const streamControllersRef = useRef<Map<string, AbortController>>(new Map());
+
+  const handleStopGenerating = (conversationId: string) => {
+    streamControllersRef.current.get(conversationId)?.abort();
+  };
 
   const markProcessing = (id: string) =>
     setProcessingConversationIds((prev) => new Set(prev).add(id));
@@ -299,6 +308,9 @@ export default function App() {
     markProcessing(localId);
     setIsLoading(true);
 
+    const controller = new AbortController();
+    streamControllersRef.current.set(localId, controller);
+
     const assistantMessageId = `m-${Date.now()}-assistant`;
     let assistantInserted = false;
     let assistantText = "";
@@ -336,26 +348,36 @@ export default function App() {
     };
 
     try {
-      await streamChat(current?.id ?? null, trimmed, (event) => {
-        if (event.type === "start") {
-          if (isNewConversation) {
-            const realId = event.conversation_id;
-            setConversations((prev) =>
-              prev.map((conv) => (conv.id === localId ? { ...conv, id: realId } : conv)),
-            );
-            setSelectedConversationId(realId);
-            markProcessing(realId);
-            unmarkProcessing(localId);
-            activeId = realId;
+      await streamChat(
+        current?.id ?? null,
+        trimmed,
+        (event) => {
+          if (event.type === "start") {
+            if (isNewConversation) {
+              const realId = event.conversation_id;
+              setConversations((prev) =>
+                prev.map((conv) => (conv.id === localId ? { ...conv, id: realId } : conv)),
+              );
+              setSelectedConversationId(realId);
+              markProcessing(realId);
+              unmarkProcessing(localId);
+              const existingController = streamControllersRef.current.get(localId);
+              if (existingController) {
+                streamControllersRef.current.delete(localId);
+                streamControllersRef.current.set(realId, existingController);
+              }
+              activeId = realId;
+            }
+          } else if (event.type === "chunk") {
+            appendAssistantChunk(event.text);
+          } else if (event.type === "error") {
+            throw new Error(event.message);
           }
-        } else if (event.type === "chunk") {
-          appendAssistantChunk(event.text);
-        } else if (event.type === "error") {
-          throw new Error(event.message);
-        }
-        // "done" needs no handling here — the try block below falls
-        // through once streamChat's promise resolves.
-      });
+          // "done" needs no handling here — the try block below falls
+          // through once streamChat's promise resolves.
+        },
+        { signal: controller.signal },
+      );
 
       setIsLoading(false);
 
@@ -370,26 +392,35 @@ export default function App() {
         }
       }
     } catch (e) {
-      console.error(e);
-      const friendly = getFriendlyErrorMessage(e);
-      setError(friendly);
-      setErrorRetry(() => () => handleSendMessage(trimmed));
       setIsLoading(false);
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeId
-            ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === userMessage.id ? { ...m, failed: true } : m,
-                ),
-              }
-            : c,
-        ),
-      );
+      const isAbort = e instanceof DOMException && e.name === "AbortError";
+      if (isAbort) {
+        // Stopped on purpose — the partial reply already on screen (from
+        // chunks received before the abort) stays as-is, no error banner,
+        // no "failed" mark on the user's message.
+      } else {
+        console.error(e);
+        const friendly = getFriendlyErrorMessage(e);
+        setError(friendly);
+        setErrorRetry(() => () => handleSendMessage(trimmed));
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === activeId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === userMessage.id ? { ...m, failed: true } : m,
+                  ),
+                }
+              : c,
+          ),
+        );
+      }
     } finally {
       unmarkProcessing(localId);
       if (activeId !== localId) unmarkProcessing(activeId);
+      streamControllersRef.current.delete(localId);
+      streamControllersRef.current.delete(activeId);
     }
   };
 
@@ -503,6 +534,7 @@ export default function App() {
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
           onPinConversation={handlePinConversation}
+          onStopGenerating={handleStopGenerating}
           isLoading={
             !!selectedConversationId && processingConversationIds.has(selectedConversationId)
           }

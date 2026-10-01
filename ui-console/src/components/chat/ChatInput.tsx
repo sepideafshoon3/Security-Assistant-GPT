@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Plus, Paperclip, X, FileText } from "lucide-react";
+import { Send, Plus, Paperclip, X, FileText, Square } from "lucide-react";
 import { cn } from "../ui/utils";
 
 interface PendingAttachment {
@@ -17,6 +17,8 @@ interface ChatInputProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   showHint: boolean;
   disabled?: boolean;
+  isGenerating?: boolean;
+  onStop?: () => void;
 }
 
 export function ChatInput({
@@ -28,6 +30,8 @@ export function ChatInput({
   textareaRef,
   showHint,
   disabled,
+  isGenerating,
+  onStop,
 }: ChatInputProps) {
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const attachMenuRef = useRef<HTMLDivElement | null>(null);
@@ -197,14 +201,29 @@ export function ChatInput({
             Press Enter to send, Shift plus Enter for a new line.
           </span>
         </div>
-        <button
-          type="submit"
-          disabled={!value.trim() || disabled}
-          aria-label="Send message"
-          className="w-11 h-11 mb-0.5 bg-accent rounded-full flex items-center justify-center hover:bg-accent-hover active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_16px_-2px_var(--accent-glow)] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
-        >
-          <Send className="w-4 h-4 text-white" aria-hidden />
-        </button>
+        {isGenerating ? (
+          <button
+            type="button"
+            onClick={onStop}
+            aria-label="Stop generating"
+            className="w-11 h-11 mb-0.5 rounded-full flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-[0_0_16px_-2px_var(--accent-glow)] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
+            style={{
+              backgroundColor: "var(--bg-primary)",
+              color: "var(--fg-primary)",
+            }}
+          >
+            <Square className="w-3.5 h-3.5" fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!value.trim() || disabled}
+            aria-label="Send message"
+            className="w-11 h-11 mb-0.5 bg-accent rounded-full flex items-center justify-center hover:bg-accent-hover active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_16px_-2px_var(--accent-glow)] flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
+          >
+            <Send className="w-4 h-4 text-white" aria-hidden />
+          </button>
+        )}
       </form>
       {showHint && (
         <p className="mt-2 text-xs text-center text-fg-faint">Shift+Enter for a new line</p>

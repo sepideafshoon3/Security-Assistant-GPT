@@ -42,6 +42,7 @@ interface ChatAreaProps {
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, title: string) => void;
   onPinConversation: (id: string) => void;
+  onStopGenerating?: (id: string) => void;
   isLoading?: boolean;
 }
 
@@ -52,6 +53,7 @@ export function ChatArea({
   onDeleteConversation,
   onRenameConversation,
   onPinConversation,
+  onStopGenerating,
   isLoading,
 }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
@@ -390,6 +392,9 @@ export function ChatArea({
                 onFocus={triggerStart}
                 textareaRef={textareaRef}
                 showHint={hasStarted}
+                disabled={isLoading}
+                isGenerating={isLoading}
+                onStop={() => conversation && onStopGenerating?.(conversation.id)}
               />
             </div>
           </div>
