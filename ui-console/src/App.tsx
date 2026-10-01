@@ -10,8 +10,9 @@ import { useIsMobile } from "./components/ui/use-mobile";
 import { deriveSeverity } from "./utils/findings";
 import {
   streamChat,
+  attachToGeneration,
+  stopGeneration,
   getGenerationStatus,
-  waitWhileGenerating,
   fetchConversations,
   type BackendConversationSummary,
   getFriendlyErrorMessage,
@@ -100,8 +101,77 @@ export default function App() {
   // conversation is generating at once.
   const streamControllersRef = useRef<Map<string, AbortController>>(new Map());
 
+  // Real Stop = tell the server. Generation runs in a backend task that
+  // survives disconnects (refresh, closed tab), so aborting the fetch alone
+  // would only hide the reply while the model keeps running. On success the
+  // open stream ends by itself with a "done" event; the local abort is only
+  // a fallback if the stop request itself fails.
   const handleStopGenerating = (conversationId: string) => {
-    streamControllersRef.current.get(conversationId)?.abort();
+    stopGeneration(conversationId).catch((e) => {
+      console.error("[stop] request failed, detaching locally", e);
+      streamControllersRef.current.get(conversationId)?.abort();
+    });
+  };
+
+  // After a refresh: if the server is still generating a reply for this
+  // conversation, re-attach — show what's been produced so far and keep
+  // streaming the rest live, then swap in the persisted version.
+  const reattachToGeneration = async (conversationId: string) => {
+    if (!(await getGenerationStatus(conversationId))) return;
+    markProcessing(conversationId);
+
+    const resumedId = `m-${Date.now()}-assistant-resumed`;
+    let text = "";
+    const showText = () => {
+      if (!text) return;
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== conversationId) return conv;
+          const exists = conv.messages.some((m) => m.id === resumedId);
+          return {
+            ...conv,
+            lastMessage: text,
+            messages: exists
+              ? conv.messages.map((m) => (m.id === resumedId ? { ...m, text } : m))
+              : [
+                  ...conv.messages,
+                  {
+                    id: resumedId,
+                    text,
+                    sender: "contact" as const,
+                    timestamp: new Date(),
+                  },
+                ],
+          };
+        }),
+      );
+    };
+
+    try {
+      await attachToGeneration(conversationId, (event) => {
+        if (event.type === "snapshot") {
+          text = event.text;
+          showText();
+        } else if (event.type === "chunk") {
+          text += event.text;
+          showText();
+        }
+      });
+    } catch (e) {
+      console.error("[reattach] failed", e);
+    } finally {
+      unmarkProcessing(conversationId);
+      try {
+        const refreshed = await fetchConversations();
+        const summary = refreshed.find((c) => c.conversation_id === conversationId);
+        if (summary) {
+          const fresh = mapBackendConversationToConversation(summary);
+          setConversations((prev) => prev.map((c) => (c.id === conversationId ? fresh : c)));
+        }
+      } catch (e) {
+        console.error("[reattach] refresh failed", e);
+      }
+    }
   };
 
   const markProcessing = (id: string) =>
@@ -154,31 +224,10 @@ export default function App() {
           setSelectedConversationId(mapped[0].id);
         }
 
-        // Check every loaded conversation for one still generating when we
-        // refreshed — not just the most recent one, since more than one
-        // can be mid-reply at once. Each check/poll runs independently so
-        // one doesn't block the others or the initial page load. This
-        // shows a "still working" state and recovers the finished reply;
-        // it does not resume showing live tokens for a stream that was
-        // already in flight before this page load (that's a bigger
-        // feature — see the generation-status endpoint's docstring).
+        // A refresh no longer kills generation (it runs in a backend
+        // task), so re-attach to every conversation that's still mid-reply.
         mapped.forEach((conv) => {
-          (async () => {
-            const stillGenerating = await getGenerationStatus(conv.id);
-            if (!stillGenerating) return;
-            markProcessing(conv.id);
-            try {
-              await waitWhileGenerating(conv.id);
-              const refreshed = await fetchConversations();
-              setConversations(
-                refreshed
-                  .filter((c) => c.num_messages > 0)
-                  .map(mapBackendConversationToConversation),
-              );
-            } finally {
-              unmarkProcessing(conv.id);
-            }
-          })();
+          void reattachToGeneration(conv.id);
         });
       } catch (e) {
         console.error(e);
@@ -190,6 +239,8 @@ export default function App() {
     };
 
     load();
+    // Only re-run on auth changes; reattachToGeneration only uses stable setState helpers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.isAuthenticated]);
   const handleNewConversation = () => {
     setError(null);

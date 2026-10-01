@@ -30,41 +30,21 @@ function authHeaders(): Record<string, string> {
 
 export type ChatStreamEvent =
   | { type: "start"; conversation_id: string }
+  | { type: "snapshot"; text: string } // everything generated so far (sent on re-attach)
   | { type: "chunk"; text: string }
-  | { type: "done"; conversation_id: string }
+  | { type: "done"; conversation_id: string; stopped?: boolean }
   | { type: "error"; message: string };
 
 /**
- * POSTs to /chat and reads back a text/event-stream body, calling onEvent
- * once per parsed SSE frame as it arrives. Uses fetch + ReadableStream
- * rather than EventSource because EventSource can't send our auth header
- * or a POST body.
- *
- * opts.signal is accepted now (for Task 3's stop button) but nothing in
- * this app passes one yet — an aborted fetch will simply reject this
- * promise, which the caller's try/catch already handles.
+ * Reads an SSE response body, calling onEvent once per parsed frame.
+ * Uses fetch + ReadableStream rather than EventSource because EventSource
+ * can't send our auth header or a POST body.
  */
-export async function streamChat(
-  conversationId: string | null,
-  text: string,
+async function readSseStream(
+  res: Response,
   onEvent: (event: ChatStreamEvent) => void,
-  opts: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({
-      conversation_id: conversationId,
-      messages: [{ role: "user", content: text }],
-    }),
-    signal: opts.signal,
-  });
-
-  if (!res.ok || !res.body) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Chat request failed (${res.status}): ${body.slice(0, 200)}`);
-  }
-
+  if (!res.body) throw new Error("Response has no body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -90,7 +70,7 @@ export async function streamChat(
         try {
           event = JSON.parse(dataLine.slice("data: ".length));
         } catch (err) {
-          console.error("[streamChat] failed to parse SSE frame:", dataLine, err);
+          console.error("[sse] failed to parse frame:", dataLine, err);
           continue;
         }
         onEvent(event);
@@ -101,7 +81,71 @@ export async function streamChat(
   }
 }
 
-/* --------- Generation status (recover "still generating" after a refresh) --------- */
+/**
+ * POSTs to /chat and follows the reply stream. NOTE: the backend generates
+ * in a background task, so aborting `signal` (or refreshing the page) only
+ * detaches this listener — it does NOT stop generation. Use
+ * stopGeneration() for a real Stop.
+ */
+export async function streamChat(
+  conversationId: string | null,
+  text: string,
+  onEvent: (event: ChatStreamEvent) => void,
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      messages: [{ role: "user", content: text }],
+    }),
+    signal: opts.signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Chat request failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  await readSseStream(res, onEvent);
+}
+
+/**
+ * Re-attaches to a generation that is still running on the server (e.g.
+ * after a page refresh). Emits one "snapshot" event with the text so far,
+ * then live "chunk" events until "done". Resolves false if nothing was
+ * running (204).
+ */
+export async function attachToGeneration(
+  conversationId: string,
+  onEvent: (event: ChatStreamEvent) => void,
+  opts: { signal?: AbortSignal } = {},
+): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/stream`, {
+    headers: { ...authHeaders() },
+    signal: opts.signal,
+  });
+  if (res.status === 204) return false;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Re-attach failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  await readSseStream(res, onEvent);
+  return true;
+}
+
+/** Explicit Stop: tells the server to really end the generation. */
+export async function stopGeneration(conversationId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/stop`, {
+    method: "POST",
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    throw new Error(`Stop failed (${res.status})`);
+  }
+}
+
+/* --------- Generation status --------- */
 
 export async function getGenerationStatus(conversationId: string): Promise<boolean> {
   const res = await fetch(`${API_BASE}/conversations/${conversationId}/generation-status`, {
@@ -118,21 +162,6 @@ export async function getGenerationStatus(conversationId: string): Promise<boole
     return !!data.is_generating;
   } catch {
     return false;
-  }
-}
-
-/** Polls generation-status until it reports false, or maxWaitMs elapses. */
-export async function waitWhileGenerating(
-  conversationId: string,
-  opts: { intervalMs?: number; maxWaitMs?: number } = {},
-): Promise<void> {
-  const interval = opts.intervalMs ?? 1500;
-  const maxWait = opts.maxWaitMs ?? 10 * 60 * 1000; // 10 min ceiling, same as the old job-poll
-  const start = Date.now();
-
-  while (await getGenerationStatus(conversationId)) {
-    if (Date.now() - start > maxWait) return;
-    await new Promise((r) => setTimeout(r, interval));
   }
 }
 
