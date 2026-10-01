@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import uuid
+from collections import Counter
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from time import time
@@ -29,6 +30,38 @@ from src.security.auth import get_current_user
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+# ----------------------------------------------------------------------
+# In-process "is this conversation currently streaming a reply" tracker.
+#
+# Intentionally NOT a DB column: this is only ever true while an SSE
+# generator is actually running in this process, so it has no business
+# surviving a restart — a column would need a migration (not set up yet)
+# and would need manual reconciliation on every startup anyway. A plain
+# in-memory counter (not a set) guards against double-counting if two
+# requests ever race for the same conversation_id.
+#
+# Known limitation: this only works correctly with a single backend
+# process. If/when this app runs with multiple uvicorn workers or
+# multiple instances behind a load balancer, this needs to move to
+# something shared (Redis, or a DB column after all) — a single
+# in-memory counter can't see what another process is doing.
+# ----------------------------------------------------------------------
+_active_generations: Counter[str] = Counter()
+
+
+def _mark_generating(conversation_id: str) -> None:
+    _active_generations[conversation_id] += 1
+
+
+def _unmark_generating(conversation_id: str) -> None:
+    _active_generations[conversation_id] -= 1
+    if _active_generations[conversation_id] <= 0:
+        del _active_generations[conversation_id]
+
+
+def is_generating(conversation_id: str) -> bool:
+    return conversation_id in _active_generations
 
 
 async def _maybe_generate_title(
@@ -100,39 +133,80 @@ async def _chat_event_stream(
     (does the except CancelledError branch really fire, does the
     partial reply really get saved) needs to be verified by testing
     against a live browser tab close / fetch abort — I can't run a
-    live server here to confirm it. Task 3 (stop button) will exercise
-    this path directly; treat this as provisional until then.
+    live server here to confirm it. Task 3 (stop button) exercises
+    this path directly.
+
+    Also marks/unmarks this conversation in the in-process
+    _active_generations counter for the whole lifetime of this turn
+    (chunk streaming + persistence + title generation), so a page
+    refresh mid-stream can poll /conversations/{id}/generation-status
+    and show a "still generating" state instead of just losing the
+    in-progress reply from view (see is_generating()/the status route
+    below).
     """
     text_parts: list[str] = []
 
     yield _sse({"type": "start", "conversation_id": conversation.id})
 
+    _mark_generating(conversation.id)
     try:
-        sync_stream = advisor.secure_chat_stream(messages=llm_messages)
-        async for piece in iterate_in_threadpool(sync_stream):
-            if not piece:
-                continue
-            text_parts.append(piece)
-            yield _sse({"type": "chunk", "text": piece})
-    except asyncio.CancelledError:
-        _persist_stream_reply(db, conversation, "".join(text_parts).strip())
-        raise
-    except Exception as e:
-        logger.exception(
-            "[chat_stream] generation failed | conversation_id=%s", conversation.id
-        )
-        yield _sse({"type": "error", "message": str(e)})
-        return
+        try:
+            sync_stream = advisor.secure_chat_stream(messages=llm_messages)
+            async for piece in iterate_in_threadpool(sync_stream):
+                if not piece:
+                    continue
+                text_parts.append(piece)
+                yield _sse({"type": "chunk", "text": piece})
+        except asyncio.CancelledError:
+            _persist_stream_reply(db, conversation, "".join(text_parts).strip())
+            raise
+        except Exception as e:
+            logger.exception(
+                "[chat_stream] generation failed | conversation_id=%s", conversation.id
+            )
+            yield _sse({"type": "error", "message": str(e)})
+            return
 
-    full_text = "".join(text_parts).strip()
-    _persist_stream_reply(db, conversation, full_text)
+        full_text = "".join(text_parts).strip()
+        _persist_stream_reply(db, conversation, full_text)
 
-    if is_first_turn and conversation.title_is_generated:
-        await _maybe_generate_title(
-            conversation, advisor, llm_messages[-1]["content"], db
-        )
+        if is_first_turn and conversation.title_is_generated:
+            await _maybe_generate_title(
+                conversation, advisor, llm_messages[-1]["content"], db
+            )
+    finally:
+        _unmark_generating(conversation.id)
 
     yield _sse({"type": "done", "conversation_id": conversation.id})
+
+
+# ============================================================
+# Generation status — lets a page that just refreshed find out a
+# conversation's reply is still being generated, so it can show a
+# "still working" state and poll instead of showing nothing until the
+# user manually resends. See _active_generations above for the (single
+# process, in-memory) design and its limitation.
+# ============================================================
+
+
+@router.get("/conversations/{conversation_id}/generation-status")
+async def get_generation_status(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+        .first()
+    )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return {"is_generating": is_generating(conversation_id)}
 
 
 # ============================================================

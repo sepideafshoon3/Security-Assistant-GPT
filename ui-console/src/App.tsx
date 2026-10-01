@@ -10,6 +10,8 @@ import { useIsMobile } from "./components/ui/use-mobile";
 import { deriveSeverity } from "./utils/findings";
 import {
   streamChat,
+  getGenerationStatus,
+  waitWhileGenerating,
   fetchConversations,
   type BackendConversationSummary,
   getFriendlyErrorMessage,
@@ -143,11 +145,32 @@ export default function App() {
           setSelectedConversationId(mapped[0].id);
         }
 
-        // No more "was a job still running when we refreshed" recovery
-        // here: /chat is a live SSE stream now, tied to one request's
-        // lifetime. If the tab reloads mid-stream, that reply is gone —
-        // same trade-off ChatGPT makes, and the alternative (resuming a
-        // stream after reload) is real scope, not a page-load nicety.
+        // Check every loaded conversation for one still generating when we
+        // refreshed — not just the most recent one, since more than one
+        // can be mid-reply at once. Each check/poll runs independently so
+        // one doesn't block the others or the initial page load. This
+        // shows a "still working" state and recovers the finished reply;
+        // it does not resume showing live tokens for a stream that was
+        // already in flight before this page load (that's a bigger
+        // feature — see the generation-status endpoint's docstring).
+        mapped.forEach((conv) => {
+          (async () => {
+            const stillGenerating = await getGenerationStatus(conv.id);
+            if (!stillGenerating) return;
+            markProcessing(conv.id);
+            try {
+              await waitWhileGenerating(conv.id);
+              const refreshed = await fetchConversations();
+              setConversations(
+                refreshed
+                  .filter((c) => c.num_messages > 0)
+                  .map(mapBackendConversationToConversation),
+              );
+            } finally {
+              unmarkProcessing(conv.id);
+            }
+          })();
+        });
       } catch (e) {
         console.error(e);
         setError(getFriendlyErrorMessage(e));

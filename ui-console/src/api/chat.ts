@@ -101,6 +101,41 @@ export async function streamChat(
   }
 }
 
+/* --------- Generation status (recover "still generating" after a refresh) --------- */
+
+export async function getGenerationStatus(conversationId: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/generation-status`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    // A transient failure here shouldn't trap the UI in a "still
+    // generating" state forever — treat it as "not generating" and let
+    // a normal reload/resend recover if something's actually wrong.
+    return false;
+  }
+  try {
+    const data = await res.json();
+    return !!data.is_generating;
+  } catch {
+    return false;
+  }
+}
+
+/** Polls generation-status until it reports false, or maxWaitMs elapses. */
+export async function waitWhileGenerating(
+  conversationId: string,
+  opts: { intervalMs?: number; maxWaitMs?: number } = {},
+): Promise<void> {
+  const interval = opts.intervalMs ?? 1500;
+  const maxWait = opts.maxWaitMs ?? 10 * 60 * 1000; // 10 min ceiling, same as the old job-poll
+  const start = Date.now();
+
+  while (await getGenerationStatus(conversationId)) {
+    if (Date.now() - start > maxWait) return;
+    await new Promise((r) => setTimeout(r, interval));
+  }
+}
+
 /* --------- Conversation list --------- */
 
 export interface BackendHistoryMessage {
