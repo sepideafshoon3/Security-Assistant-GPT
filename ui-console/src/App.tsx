@@ -100,6 +100,10 @@ export default function App() {
   // Stop button abort the right in-flight stream even if more than one
   // conversation is generating at once.
   const streamControllersRef = useRef<Map<string, AbortController>>(new Map());
+  // Mirrors processingConversationIds but read synchronously (no React
+  // batching delay) from reattachToGeneration's guard below — see its
+  // comment for why the state version alone isn't reliable there.
+  const locallyStreamingRef = useRef<Set<string>>(new Set());
 
   // Real Stop = tell the server. Generation runs in a backend task that
   // survives disconnects (refresh, closed tab), so aborting the fetch alone
@@ -117,6 +121,15 @@ export default function App() {
   // conversation, re-attach — show what's been produced so far and keep
   // streaming the rest live, then swap in the persisted version.
   const reattachToGeneration = async (conversationId: string) => {
+    // Guard against double subscription: if this tab is already live-
+    // streaming this conversation via handleSendMessage's own streamChat
+    // (e.g. the load effect re-firing mid-send — Fast Refresh during dev
+    // is the common trigger, but a stray re-render could do it too), a
+    // second subscriber here would render a second, independently-growing
+    // copy of the same reply until the next fetchConversations reconciles
+    // them. A ref (not state) because this must be correct the instant
+    // the effect runs, with no render/commit delay.
+    if (locallyStreamingRef.current.has(conversationId)) return;
     if (!(await getGenerationStatus(conversationId))) return;
     markProcessing(conversationId);
 
@@ -226,6 +239,8 @@ export default function App() {
 
         // A refresh no longer kills generation (it runs in a backend
         // task), so re-attach to every conversation that's still mid-reply.
+        // (reattachToGeneration itself skips anything this tab is already
+        // live-streaming — see its guard.)
         mapped.forEach((conv) => {
           void reattachToGeneration(conv.id);
         });
@@ -357,6 +372,7 @@ export default function App() {
     }
 
     markProcessing(localId);
+    locallyStreamingRef.current.add(localId);
     setIsLoading(true);
 
     const controller = new AbortController();
@@ -412,6 +428,8 @@ export default function App() {
               setSelectedConversationId(realId);
               markProcessing(realId);
               unmarkProcessing(localId);
+              locallyStreamingRef.current.delete(localId);
+              locallyStreamingRef.current.add(realId);
               const existingController = streamControllersRef.current.get(localId);
               if (existingController) {
                 streamControllersRef.current.delete(localId);
@@ -472,6 +490,8 @@ export default function App() {
       if (activeId !== localId) unmarkProcessing(activeId);
       streamControllersRef.current.delete(localId);
       streamControllersRef.current.delete(activeId);
+      locallyStreamingRef.current.delete(localId);
+      locallyStreamingRef.current.delete(activeId);
     }
   };
 
