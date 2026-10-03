@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from src.security.auth import (
     hash_password,
     verify_password,
 )
+from src.security.rate_limit import LOGIN_RATE_LIMIT, limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -72,7 +73,9 @@ def signup(
 
 
 @router.post("/login", response_model=AuthResponse)
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login(
+    request: Request,
     body: LoginRequest,
     db: Session = Depends(get_db),
 ) -> AuthResponse:

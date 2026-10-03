@@ -27,8 +27,10 @@ from src.api.state import (
 from src.db.models import Conversation, GenerationJob, Message, User
 from src.db.session import SessionLocal, get_db
 from src.learning.online_learning_events import ChatTurnEvent
+from src.prompts.task_prompts import build_title_gen_messages
 from src.security.audit import audit_log
 from src.security.auth import get_current_user
+from src.security.rate_limit import CHAT_RATE_LIMIT, limiter
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +48,7 @@ async def _maybe_generate_title(
     try:
         raw_title = await run_in_threadpool(
             advisor.secure_chat,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Provide a very short title (maximum 5 words) for this conversation. Return only the title.",
-                },
-                {"role": "user", "content": first_user_message},
-            ],
+            messages=build_title_gen_messages(first_user_message),
         )
         title = raw_title.strip().strip('"')
         if title:
@@ -213,6 +209,7 @@ async def stop_generation(
 
 
 @router.post("/chat")
+@limiter.limit(CHAT_RATE_LIMIT)
 async def chat(
     request: Request,
     current_user: User = Depends(get_current_user),
