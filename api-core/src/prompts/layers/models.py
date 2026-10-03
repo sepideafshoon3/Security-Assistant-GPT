@@ -62,6 +62,14 @@ class PromptLayerConfig(BaseModel):
         default_factory=list,
         description="Variable names that must be present when rendering",
     )
+    version: str = Field(
+        default="1.0.0",
+        description=(
+            "Semver for this layer's content. Bump on any change to the "
+            "rendered text so logs/evals can tell which wording produced "
+            "a given output. See prompts/CHANGELOG.md."
+        ),
+    )
 
     @field_validator("id")
     @classmethod
@@ -120,6 +128,10 @@ class PromptStackConfig(BaseModel):
     separator: str = Field(
         default="\n\n",
         description="Separator used when merging same-role layers",
+    )
+    version: str = Field(
+        default="1.0.0",
+        description="Semver for this stack as a whole. See prompts/CHANGELOG.md.",
     )
 
     @field_validator("name")

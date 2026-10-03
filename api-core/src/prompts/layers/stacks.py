@@ -50,10 +50,18 @@ def build_secure_chat_stack(
     merge_same_role: bool = False,
     provider: str = "openai",
 ) -> PromptStackConfig:
+    # Baselined at 1.0.0 as of the Week 4 prompt audit (see prompts/CHANGELOG.md) —
+    # bump a layer's version here whenever its registry content_ref changes.
     layers: list[PromptLayerConfig] = [
-        _sys("root", order=10, content_ref="root"),
-        _sys("style", order=20, content_ref="style"),
-        _sys("policy", order=30, content_ref="policy", priority=100),
+        _sys("root", order=10, content_ref="root").model_copy(
+            update={"version": "1.0.0"}
+        ),
+        _sys("style", order=20, content_ref="style").model_copy(
+            update={"version": "1.0.0"}
+        ),
+        _sys("policy", order=30, content_ref="policy", priority=100).model_copy(
+            update={"version": "1.0.0"}
+        ),
     ]
 
     if include_api_system:
@@ -88,6 +96,7 @@ def build_secure_chat_stack(
         layers=layers,
         merge_same_role=merge_same_role,
         separator="\n\n",
+        version="1.0.0",
     )
 
 
@@ -127,6 +136,7 @@ def build_planner_stack(
         layers=layers,
         merge_same_role=True,
         separator="",
+        version="1.0.0",
     )
 
 
