@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import type { Conversation } from "../App";
+import type { Conversation, Project } from "../App";
+import { ProjectSubmenu } from "./ProjectSubmenu";
 import {
   ShieldCheck,
   MoreHorizontal,
@@ -7,7 +8,6 @@ import {
   PinOff,
   Pencil,
   Trash2,
-  FolderPlus,
   Users,
   Share2,
 } from "lucide-react";
@@ -37,22 +37,28 @@ import {
 
 interface ChatAreaProps {
   conversation: Conversation | null;
+  projects: Project[];
   onSendMessage: (text: string) => void;
   onResendMessage: (messageId: string) => void;
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, title: string) => void;
   onPinConversation: (id: string) => void;
+  onSetConversationProject: (conversationId: string, projectId: string | null) => void;
+  onCreateProject: (name: string) => Promise<Project | null>;
   onStopGenerating?: (id: string) => void;
   isLoading?: boolean;
 }
 
 export function ChatArea({
   conversation,
+  projects,
   onSendMessage,
   onResendMessage,
   onDeleteConversation,
   onRenameConversation,
   onPinConversation,
+  onSetConversationProject,
+  onCreateProject,
   onStopGenerating,
   isLoading,
 }: ChatAreaProps) {
@@ -313,12 +319,14 @@ export function ChatArea({
                     Delete
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  {/* Same as the sidebar menu: no project/group data model or
-                   share-link endpoint on the backend yet. */}
-                  <DropdownMenuItem disabled title="Coming soon">
-                    <FolderPlus className="w-3.5 h-3.5" aria-hidden />
-                    Add to project
-                  </DropdownMenuItem>
+                  <ProjectSubmenu
+                    projects={projects}
+                    currentProjectId={conversation.projectId}
+                    onAssign={(projectId) => onSetConversationProject(conversation.id, projectId)}
+                    onCreateProject={onCreateProject}
+                  />
+                  {/* Group data model + share-link endpoint don't exist on the
+                   backend yet. */}
                   <DropdownMenuItem disabled title="Coming soon">
                     <Users className="w-3.5 h-3.5" aria-hidden />
                     Add to group

@@ -19,7 +19,18 @@ import {
   deleteConversation,
   renameConversation,
   setConversationPinned,
+  setConversationProject,
+  fetchProjects,
+  createProject,
+  renameProject,
+  deleteProject,
+  type BackendProject,
 } from "./api/chat";
+
+export interface Project {
+  id: string;
+  name: string;
+}
 export interface Message {
   id: string;
   text: string;
@@ -36,6 +47,7 @@ export interface Conversation {
   messages: Message[];
   status?: "clean" | "findings" | "critical"; // TODO: source from backend scan results
   pinned?: boolean;
+  projectId?: string | null;
 }
 
 function deriveStatus(text: string): Conversation["status"] {
@@ -62,7 +74,12 @@ function mapBackendConversationToConversation(summary: BackendConversationSummar
     messages,
     status: deriveStatus(`${summary.theme || ""} ${lastMessageText}`),
     pinned: summary.pinned,
+    projectId: summary.project_id ?? null,
   };
+}
+
+function mapBackendProjectToProject(p: BackendProject): Project {
+  return { id: p.id, name: p.name };
 }
 
 export default function App() {
@@ -87,6 +104,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +227,7 @@ export default function App() {
       // otherwise it stays visible underneath the login modal, since the
       // app shell renders dimmed behind it rather than unmounting.
       setConversations([]);
+      setProjects([]);
       setSelectedConversationId(null);
       setError(null);
       setErrorRetry(null);
@@ -219,7 +238,16 @@ export default function App() {
       setIsLoading(true);
       setError(null);
       try {
-        const backendConvs = await fetchConversations();
+        const [backendConvs, backendProjects] = await Promise.all([
+          fetchConversations(),
+          fetchProjects().catch((e) => {
+            // Projects are a nice-to-have for the sidebar; don't let a
+            // failure here block the conversation list from loading.
+            console.error(e);
+            return [] as BackendProject[];
+          }),
+        ]);
+        setProjects(backendProjects.map(mapBackendProjectToProject));
 
         // Clear out abandoned empty chats (e.g. a conversation row that got
         // created but never received a message, such as a request that was
@@ -316,6 +344,68 @@ export default function App() {
         prev.map((c) => (c.id === conversationId ? { ...c, pinned: !next } : c)),
       );
       setError("Couldn't update pin — try again.");
+    }
+  };
+
+  const handleSetConversationProject = async (conversationId: string, projectId: string | null) => {
+    const previous = conversations;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, projectId } : c)),
+    );
+    try {
+      await setConversationProject(conversationId, projectId);
+    } catch (e) {
+      console.error(e);
+      setConversations(previous);
+      setError("Couldn't update project — try again.");
+    }
+  };
+
+  const handleCreateProject = async (name: string): Promise<Project | null> => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    try {
+      const created = await createProject(trimmed);
+      const project = mapBackendProjectToProject(created);
+      setProjects((prev) => [...prev, project]);
+      return project;
+    } catch (e) {
+      console.error(e);
+      setError("Couldn't create project — try again.");
+      return null;
+    }
+  };
+
+  const handleRenameProject = async (projectId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const previous = projects;
+    setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, name: trimmed } : p)));
+    try {
+      await renameProject(projectId, trimmed);
+    } catch (e) {
+      console.error(e);
+      setProjects(previous);
+      setError("Couldn't rename project — try again.");
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    const previousProjects = projects;
+    const previousConversations = conversations;
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    // The backend un-files conversations (project_id -> null) rather than
+    // deleting them, so mirror that locally.
+    setConversations((prev) =>
+      prev.map((c) => (c.projectId === projectId ? { ...c, projectId: null } : c)),
+    );
+    try {
+      await deleteProject(projectId);
+    } catch (e) {
+      console.error(e);
+      setProjects(previousProjects);
+      setConversations(previousConversations);
+      setError("Couldn't delete project — try again.");
     }
   };
 
@@ -583,6 +673,7 @@ export default function App() {
           isMobile={isMobile}
           onClose={() => setIsSidebarOpen(false)}
           conversations={conversations}
+          projects={projects}
           selectedConversationId={selectedConversationId ?? ""}
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
@@ -595,16 +686,23 @@ export default function App() {
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
           onPinConversation={handlePinConversation}
+          onSetConversationProject={handleSetConversationProject}
+          onCreateProject={handleCreateProject}
+          onRenameProject={handleRenameProject}
+          onDeleteProject={handleDeleteProject}
           onLoginClick={() => setAuthModal({ open: true, mode: "login" })}
         />
 
         <ChatArea
           conversation={selectedConversation || null}
+          projects={projects}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
           onDeleteConversation={handleDeleteConversation}
           onRenameConversation={handleRenameConversation}
           onPinConversation={handlePinConversation}
+          onSetConversationProject={handleSetConversationProject}
+          onCreateProject={handleCreateProject}
           onStopGenerating={handleStopGenerating}
           isLoading={
             !!selectedConversationId && processingConversationIds.has(selectedConversationId)

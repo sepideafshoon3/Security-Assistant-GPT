@@ -181,6 +181,7 @@ export interface BackendConversationSummary {
   last_updated?: string;
   last_messages: BackendHistoryMessage[];
   pinned: boolean;
+  project_id?: string | null;
 }
 
 export async function fetchConversations(): Promise<BackendConversationSummary[]> {
@@ -242,5 +243,80 @@ export async function setConversationPinned(conversationId: string, pinned: bool
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Failed to update pin (${res.status}): ${body.slice(0, 200)}`);
+  }
+}
+
+export async function setConversationProject(conversationId: string, projectId: string | null) {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ project_id: projectId }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to update project (${res.status}): ${body.slice(0, 200)}`);
+  }
+}
+
+/* --------- Projects --------- */
+
+export interface BackendProject {
+  id: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchProjects(): Promise<BackendProject[]> {
+  const res = await fetch(`${API_BASE}/projects`, {
+    headers: { ...authHeaders() },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Failed to load projects (${res.status}): ${text.slice(0, 200)}`);
+  }
+  try {
+    const data = JSON.parse(text);
+    return (data?.projects as BackendProject[]) ?? [];
+  } catch (err) {
+    console.error("[fetchProjects] Non-JSON response:", text.slice(0, 500), err);
+    throw new Error("Invalid JSON from /projects");
+  }
+}
+
+export async function createProject(name: string): Promise<BackendProject> {
+  const res = await fetch(`${API_BASE}/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to create project (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function renameProject(projectId: string, name: string): Promise<BackendProject> {
+  const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to rename project (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to delete project (${res.status}): ${body.slice(0, 200)}`);
   }
 }
