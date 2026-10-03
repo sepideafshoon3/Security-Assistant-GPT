@@ -75,7 +75,7 @@ from src.api.routers.exploit import router as exploit_router
 from src.api.routers.online_learning import router as online_learning_router
 from src.api.routers.projects import router as projects_router
 from src.api.state import EVENTS_LOG_DIR, online_learning_client
-from src.db.session import init_db
+from src.db.migrate import run_migrations
 from src.security.auth import ensure_jwt_secret_configured
 from src.security.rate_limit import limiter
 
@@ -91,8 +91,11 @@ app.add_middleware(SlowAPIMiddleware)
 
 
 @app.on_event("startup")
-def _create_tables_if_missing() -> None:
-    init_db()
+def _startup() -> None:
+    # Schema is managed by Alembic (see migrations/). Set DB_AUTO_MIGRATE=0 to
+    # skip this and run `alembic upgrade head` as a separate deploy step.
+    if os.getenv("DB_AUTO_MIGRATE", "1") != "0":
+        run_migrations()
     ensure_jwt_secret_configured()
 
 
