@@ -95,6 +95,7 @@ logger = logging.getLogger(__name__)
 import sentry_sdk
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 
 from src.api.auth_routes import router as auth_router
 from src.api.routers.chat import router as chat_router
@@ -181,14 +182,53 @@ def _startup() -> None:
     ensure_jwt_secret_configured()
 
 
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+def _resolve_cors_origins() -> list[str]:
+    """CORS_ORIGINS is a comma-separated list of allowed origins, e.g.
+    "https://app.example.com,https://admin.example.com". Same
+    local/production split as JWT_SECRET_KEY (src/security/auth.py):
+    unset is fine for local dev (falls back to the usual Vite dev-server
+    ports), but a missing CORS_ORIGINS in a non-local APP_ENV fails
+    startup instead of quietly shipping a backend that only talks to
+    localhost.
+    """
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
 
+    if not raw:
+        if app_env not in ("development", "dev", "local"):
+            raise RuntimeError(
+                f"CORS_ORIGINS is not set and APP_ENV={app_env!r} is not a "
+                "local/dev environment. Refusing to start with no allowed "
+                "origins configured. Set CORS_ORIGINS to a comma-separated "
+                "list of the frontend origin(s), e.g. https://app.example.com."
+            )
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
+        ]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+if os.getenv("FORCE_HTTPS", "").strip().lower() in ("1", "true", "yes", "on"):
+    # Opt-in, not automatic: most hosts (Railway/Render/Fly) terminate TLS
+    # at the edge and already redirect http->https before a request
+    # reaches this process - adding this there is redundant, and if the
+    # proxy doesn't forward X-Forwarded-Proto correctly it'll redirect in
+    # a loop. Only turn this on for a bare-VM deployment with no such
+    # proxy in front.
+    app.add_middleware(HTTPSRedirectMiddleware)
+    logger.info("FORCE_HTTPS enabled - redirecting http to https")
+
+# CORS goes last (= outermost) so preflight OPTIONS requests get the
+# right headers even on paths that 404 or get stopped by another
+# middleware first - matches the FastAPI/Starlette-recommended ordering.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=_resolve_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

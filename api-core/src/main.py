@@ -5,37 +5,13 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
 
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-
+# CORS is configured once, in src/api/http.py (CORS_ORIGINS env var) -
+# it used to be duplicated here with a different hardcoded origin list,
+# which meant the allowed origins silently depended on whether you ran
+# `uvicorn src.main:app` or `uvicorn src.api.http:app`, and running this
+# entrypoint stacked two CORS middlewares, which browsers reject on
+# credentialed requests (two Access-Control-Allow-Origin headers).
 from src.api.http import app  # noqa: E402
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
-    allow_credentials=True,
-    allow_methods=[
-        "GET",
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE",
-        "OPTIONS",
-    ],
-    allow_headers=[
-        "Accept",
-        "Authorization",
-        "Content-Type",
-        "Origin",
-        "X-Requested-With",
-    ],
-)
 
 # Entry-point helper for uvicorn
 if __name__ == "__main__":
