@@ -1,0 +1,55 @@
+# Render Blueprint. Deploy: push this to the repo, then in the Render
+# dashboard "New +" -> "Blueprint" -> pick this repo. See DEPLOY.md for
+# the one-time manual steps this file can't do for you (the service
+# names below become public *.onrender.com subdomains, so they must be
+# globally unique -- change them if Render says they're taken, and keep
+# CORS_ORIGINS / VITE_API_BASE_URL below in sync if you do).
+
+databases:
+  - name: security-assistant-db
+    databaseName: security_assistant
+    user: security_assistant
+    plan: free # expires 30 days after creation -- see DEPLOY.md
+
+services:
+  - type: web
+    name: security-assistant-api
+    runtime: docker
+    dockerfilePath: ./api-core/Dockerfile
+    dockerContext: ./api-core
+    plan: free # sleeps after 15 min idle -- fine for staging, see DEPLOY.md
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://security-assistant-web.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: security-assistant-db
+          property: connectionString
+      - key: LOG_FORMAT
+        value: json
+      # Secrets Render shouldn't generate or guess -- set these in the
+      # dashboard after the first deploy (sync: false means "Blueprint
+      # won't touch this value once it's set").
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+
+  - type: web
+    name: security-assistant-web
+    runtime: docker
+    dockerfilePath: ./ui-console/Dockerfile
+    dockerContext: ./ui-console
+    plan: free # sleeps after 15 min idle -- fine for staging, see DEPLOY.md
+    envVars:
+      # Baked into the static JS at *build* time (Vite has no runtime env
+      # config) -- Render auto-translates service env vars into Docker
+      # build args, which is how this reaches the Dockerfile's ARG
+      # VITE_API_BASE_URL. Must match the api service's name above.
+      - key: VITE_API_BASE_URL
+        value: https://security-assistant-api.onrender.com

@@ -19,8 +19,23 @@ from src.core.paths import BASE_DIR
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def _normalize_database_url(url: str) -> str:
+    """Managed Postgres providers (Render, Heroku, Railway, ...) typically
+    hand out a bare postgres:// or postgresql:// URL with no driver in it,
+    which SQLAlchemy defaults to psycopg2 -- not installed here, since the
+    `postgres` extra installs psycopg (v3) instead. Normalize so whatever
+    connection string a provider gives you can be pasted into DATABASE_URL
+    unmodified."""
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
 DEFAULT_SQLITE_URL = f"sqlite:///{(DATA_DIR / 'app.db').as_posix()}"
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_SQLITE_URL)
+DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL", DEFAULT_SQLITE_URL))
 _is_sqlite = DATABASE_URL.startswith("sqlite")
 
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
