@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.api.schemas.schemas import ConversationRenameRequest
 from src.core.models import ConversationSummary
-from src.db.models import Conversation, GenerationJob, User
+from src.db.models import Conversation, GenerationJob, Project, User
 from src.db.session import get_db
 from src.security.auth import get_current_user
 
@@ -41,6 +41,7 @@ async def list_conversations(
                 last_updated=conv.updated_at,
                 last_messages=history[-5:],
                 pinned=conv.pinned,
+                project_id=conv.project_id,
             )
         )
 
@@ -116,6 +117,24 @@ async def update_conversation(
     if body.pinned is not None:
         conversation.pinned = body.pinned
 
+    # Distinguish "field omitted" (leave assignment alone) from
+    # "field sent as null" (remove from project) via model_fields_set —
+    # body.project_id is None in both cases.
+    if "project_id" in body.model_fields_set:
+        if body.project_id is None:
+            conversation.project_id = None
+        else:
+            project = (
+                db.query(Project)
+                .filter(
+                    Project.id == body.project_id, Project.user_id == current_user.id
+                )
+                .first()
+            )
+            if project is None:
+                raise HTTPException(status_code=404, detail="Project not found")
+            conversation.project_id = project.id
+
     db.commit()
     db.refresh(conversation)
 
@@ -124,4 +143,5 @@ async def update_conversation(
         "theme": conversation.title,
         "last_updated": conversation.updated_at,
         "pinned": conversation.pinned,
+        "project_id": conversation.project_id,
     }

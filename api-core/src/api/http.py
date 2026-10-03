@@ -70,6 +70,7 @@ from src.api.routers.chat import router as chat_router
 from src.api.routers.conversations import router as conversations_router
 from src.api.routers.exploit import router as exploit_router
 from src.api.routers.online_learning import router as online_learning_router
+from src.api.routers.projects import router as projects_router
 from src.api.state import EVENTS_LOG_DIR, online_learning_client
 from src.db.session import init_db
 from src.security.auth import ensure_jwt_secret_configured
@@ -102,6 +103,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(conversations_router)
+app.include_router(projects_router)
 app.include_router(online_learning_router)
 app.include_router(exploit_router)
 

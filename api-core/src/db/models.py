@@ -37,9 +37,44 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    projects: Mapped[list[Project]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email}>"
+
+
+class Project(Base):
+    """A user-created folder for grouping conversations."""
+
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    user: Mapped[User] = relationship(back_populates="projects")
+    conversations: Mapped[list[Conversation]] = relationship(
+        back_populates="project",
+        # Deleting a project un-files its conversations rather than
+        # deleting them — the FK below is ondelete="SET NULL" to match.
+    )
+
+    __table_args__ = (Index("ix_projects_user_id_updated_at", "user_id", "updated_at"),)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Project id={self.id} user_id={self.user_id} name={self.name!r}>"
 
 
 class Conversation(Base):
@@ -50,6 +85,9 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(255), default="New chat")
     # Whether `title` was auto-generated (True) or set/edited by the user (False).
@@ -63,6 +101,7 @@ class Conversation(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="conversations")
+    project: Mapped[Project | None] = relationship(back_populates="conversations")
     messages: Mapped[list[Message]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
@@ -74,6 +113,7 @@ class Conversation(Base):
 
     __table_args__ = (
         Index("ix_conversations_user_id_updated_at", "user_id", "updated_at"),
+        Index("ix_conversations_project_id", "project_id"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover

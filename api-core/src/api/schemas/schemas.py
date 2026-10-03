@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel
 
@@ -20,6 +20,26 @@ class ReportResponse(BaseModel):
 class ConversationRenameRequest(BaseModel):
     title: str | None = None
     pinned: bool | None = None
+    # str | None, and "not sent at all" are three different states here:
+    # omitted -> leave project assignment alone; null -> remove from any
+    # project; a value -> move into that project. Routers must check
+    # "project_id" in body.model_fields_set to tell omitted from null.
+    project_id: str | None = None
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str
+
+
+class ProjectResponse(BaseModel):
+    id: str
+    name: str
+    created_at: Any = None
+    updated_at: Any = None
 
 
 class ChatMessage(BaseModel):
