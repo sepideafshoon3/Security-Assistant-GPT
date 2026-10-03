@@ -1,0 +1,28 @@
+# Local Postgres for testing api-core against a real server DB before
+# deploying (see Week 5: "Postgres-ready DB config"). Not used in
+# production — Week 6 adds the real deployment config.
+#
+# Usage:
+#   docker compose up -d
+#   cd api-core && DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/security_assistant \
+#     ./scripts/check_db.sh
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: security_assistant
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
