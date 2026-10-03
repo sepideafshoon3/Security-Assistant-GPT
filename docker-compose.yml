@@ -1,13 +1,47 @@
-# Local Postgres for testing api-core against a real server DB before
+# Local dev / smoke-test stack for the whole app: API, frontend, and an
+# optional local Postgres for testing against a real server DB before
 # deploying (see Week 5: "Postgres-ready DB config"). Not used in
-# production — Week 6 adds the real deployment config.
+# production -- the hosting step (Week 6) uses its own deploy config.
 #
 # Usage:
-#   docker compose up -d
-#   cd api-core && DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/security_assistant \
-#     ./scripts/check_db.sh
+#   docker compose up --build
+#   -> API on http://localhost:8000, web on http://localhost:3000
+#
+# `api` defaults to its own SQLite file (a named volume, so data survives
+# `docker compose down`) -- Postgres here is opt-in, not required. To
+# point the API at it instead, set in api-core/.env:
+#   DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/security_assistant
+# (service name "postgres", not "localhost" -- containers resolve each
+# other by service name on the compose network) then:
+#   docker compose up --build postgres api web
 
 services:
+  api:
+    build:
+      context: ./api-core
+      dockerfile: Dockerfile
+    env_file:
+      - ./api-core/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - api-data:/app/data
+      - api-logs:/app/logs
+
+  web:
+    build:
+      context: ./ui-console
+      dockerfile: Dockerfile
+      args:
+        # Baked in at build time -- see ui-console/Dockerfile. This
+        # points at the API's host-mapped port because the *browser*
+        # calls this URL directly, not the web container.
+        VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -26,3 +60,5 @@ services:
 
 volumes:
   postgres-data:
+  api-data:
+  api-logs:
