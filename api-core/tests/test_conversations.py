@@ -105,18 +105,20 @@ def test_delete_own_conversation_succeeds(client, db_session, signup, auth_heade
     db_session.commit()
     db_session.refresh(conversation)
 
+    conversation_id = conversation.id
+
     response = client.delete(
-        f"/conversations/{conversation.id}",
+        f"/conversations/{conversation_id}",
         headers=auth_headers(alice["access_token"]),
     )
 
     assert response.status_code == 204
+
     # The delete happened through a different session (the one `get_db`
-    # hands the request). db_session's identity map doesn't know that —
-    # without expiring it first, .get() returns the cached pre-delete
-    # object instead of re-querying.
+    # hands the request). Expire the test session so the assertion checks
+    # the database instead of its stale identity map.
     db_session.expire_all()
-    assert db_session.get(Conversation, conversation.id) is None
+    assert db_session.get(Conversation, conversation_id) is None
 
 
 def test_cannot_delete_another_user_s_conversation(
