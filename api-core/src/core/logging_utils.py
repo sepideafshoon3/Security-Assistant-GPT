@@ -53,7 +53,15 @@ class JsonFormatter(logging.Formatter):
     the call site passed via ``logger.info(..., extra={...})`` — callers
     don't need to know this formatter exists."""
 
+    def __init__(self, *args, ensure_ascii: bool = True, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.ensure_ascii = ensure_ascii
+
     def format(self, record: logging.LogRecord) -> str:
+        return json.dumps(self.build_payload(record), ensure_ascii=self.ensure_ascii)
+
+    def build_payload(self, record: logging.LogRecord) -> dict:
+        """The dict that ``format`` serialises; subclasses may reshape it."""
         payload: dict = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
@@ -71,4 +79,4 @@ class JsonFormatter(logging.Formatter):
             payload[key] = value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
-        return json.dumps(payload)
+        return payload

@@ -5,10 +5,9 @@ import os
 import re
 import time
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from typing import Any
 
-from src.llm.llm_logging import DailyFileHandler
+from src.llm.llm_logging import get_daily_logger
 
 
 # ----------------------------------------------------------------------
@@ -61,26 +60,9 @@ logger = setup_logger()
 
 
 def _get_daily_llm_logger() -> logging.Logger:
-    """Lazy-init a daily JSONL logger shared with the main openai_client."""
+    """Lazy-init the shared daily JSONL LLM logger."""
     try:
-        from src.core.paths import BASE_DIR as _BASE_DIR
-
-        log_dir_env = os.getenv("LLM_LOG_DIR")
-        log_dir = (
-            Path(log_dir_env).expanduser()
-            if log_dir_env
-            else (_BASE_DIR / "logs" / "llm")
-        )
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        llm_log = logging.getLogger("mrrobot.llm")
-        if not any(getattr(h, "log_dir", None) == log_dir for h in llm_log.handlers):
-            h = DailyFileHandler(log_dir=log_dir, prefix="llm")
-            h.setFormatter(logging.Formatter("%(message)s"))
-            llm_log.addHandler(h)
-            llm_log.setLevel(logging.INFO)
-            llm_log.propagate = False
-        return llm_log
+        return get_daily_logger("mrrobot.llm", "llm")
     except Exception:
         return logging.getLogger("mrrobot.llm")
 

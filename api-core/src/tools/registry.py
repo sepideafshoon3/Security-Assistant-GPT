@@ -23,10 +23,9 @@ import os
 import threading as _threading
 import time as _time
 import traceback
-from pathlib import Path
 from typing import Any
 
-from src.llm.llm_logging import DailyFileHandler
+from src.llm.llm_logging import get_daily_logger
 from src.search.exploitdb_client import ExploitDBClient
 from src.search.local_web_search import WebResult, web_search
 from src.search.searchsploit_client import SearchsploitClient
@@ -44,24 +43,7 @@ def _get_tool_jsonl_logger() -> logging.Logger:
     tool calls and LLM responses can be correlated in a single log stream.
     """
     try:
-        from src.core.paths import BASE_DIR as _BASE_DIR
-
-        log_dir_env = os.getenv("LLM_LOG_DIR")
-        log_dir = (
-            Path(log_dir_env).expanduser()
-            if log_dir_env
-            else (_BASE_DIR / "logs" / "llm")
-        )
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        _logger = logging.getLogger("mrrobot.tools")
-        if not any(getattr(h, "log_dir", None) == log_dir for h in _logger.handlers):
-            h = DailyFileHandler(log_dir=log_dir, prefix="tools")
-            h.setFormatter(logging.Formatter("%(message)s"))
-            _logger.addHandler(h)
-            _logger.setLevel(logging.INFO)
-            _logger.propagate = False
-        return _logger
+        return get_daily_logger("mrrobot.tools", "tools")
     except Exception:
         return logging.getLogger("mrrobot.tools")
 
