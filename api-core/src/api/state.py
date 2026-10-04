@@ -13,6 +13,7 @@ from src.learning.online_learning_events import OnlineLearningEventDispatcher
 from src.llm.openai_client import LLMConfig, load_llm_config
 from src.llm.router import create_advisor, detect_provider, get_router
 from src.memory.chat_memory import ChatMemory
+from src.policies.loader import load_policy_engine
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,11 @@ DATASETS_DIR.mkdir(parents=True, exist_ok=True)
 # ============================================================
 
 planner = Planner()
+policy_engine = load_policy_engine(CONFIG_DIR)
 executor = Executor(
     reports_dir=REPORTS_DIR,
     config_dir=CONFIG_DIR,
+    policy_engine=policy_engine,
 )
 chat_memory = ChatMemory(CHAT_MEMORY_DIR, max_messages=50)
 

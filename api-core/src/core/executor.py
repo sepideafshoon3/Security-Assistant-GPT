@@ -5,6 +5,7 @@ from pathlib import Path
 from src.core.models import Plan, Report, ToolResult
 
 # NEW
+from src.core.policy_engine import PolicyEngine
 from src.llm.openai_client import load_llm_config
 from src.llm.router import create_advisor
 from src.security.audit import audit_log
@@ -14,9 +15,21 @@ from src.tools.semgrep_runner import run_semgrep
 
 
 class Executor:
-    def __init__(self, reports_dir: Path, config_dir: Path):
+    def __init__(
+        self,
+        reports_dir: Path,
+        config_dir: Path,
+        policy_engine: PolicyEngine | None = None,
+    ):
         self.reports_dir = reports_dir
         self.reports_dir.mkdir(parents=True, exist_ok=True)
+
+        # Was referenced in execute_plan() but never accepted or stored
+        # here, so every real run raised AttributeError before it got to
+        # the human-approval check. None is accepted (e.g. a caller with
+        # no policy config yet) but execute_plan() logs a warning when
+        # it's missing rather than silently skipping the check.
+        self.policy_engine = policy_engine
 
         # NEW: LLM advisor (OpenAI or xAI via central router)
         llm_config = load_llm_config(config_dir)
@@ -26,7 +39,12 @@ class Executor:
         results: list[ToolResult] = []
 
         for action in plan.actions:
-            if self.policy_engine.requires_human_approval(action.action):
+            if self.policy_engine is None:
+                audit_log(
+                    "policy_engine_missing",
+                    {"action": action.action, "note": "approval check skipped"},
+                )
+            elif self.policy_engine.requires_human_approval(action.action):
                 audit_log("human_approval_required", {"action": action.action})
                 # hook for real approval mechanism
 

@@ -23,7 +23,11 @@ def main() -> None:
 
     planner = Planner()
     policy_engine = load_policy_engine(config_dir)
-    executor = Executor(policy_engine=policy_engine, reports_dir=reports_dir)
+    executor = Executor(
+        reports_dir=reports_dir,
+        config_dir=config_dir,
+        policy_engine=policy_engine,
+    )
 
     task_id = str(uuid.uuid4())
     task = Task(
