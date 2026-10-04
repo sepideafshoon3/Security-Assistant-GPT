@@ -48,6 +48,15 @@ aren't (and can't be, from a YAML file).
 - **CORS_ORIGINS / VITE_API_BASE_URL are hardcoded to each other's URL**
   in `render.yaml` (see step 3 above). If you later add a custom domain,
   update both and push.
+- **`ENABLE_EXPLOIT_ROUTER` stays `"0"` here on purpose.** `/exploit/*`
+  asks the LLM to generate working exploit code and run instructions for
+  an arbitrary target; today it's reachable by any authenticated user,
+  with no `PolicyEngine` check, no human-approval step, and no rate limit
+  of its own. Until that's built, this flag is the only thing stopping
+  it from being a public, unguarded exploit generator on
+  `security-assistant-api.onrender.com`. Don't flip it to `"1"` here.
+  If you need it, run it locally (`ENABLE_EXPLOIT_ROUTER=1` in your
+  `.env`) where only you can reach it.
 - Any other env var from `api-core/.env.example` you want in production
   (e.g. `LLM_MODEL`, `RATE_LIMIT_LOGIN`) isn't in `render.yaml` — add it
   directly in the dashboard's Environment tab, same as the `sync: false`

@@ -100,7 +100,6 @@ from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from src.api.auth_routes import router as auth_router
 from src.api.routers.chat import router as chat_router
 from src.api.routers.conversations import router as conversations_router
-from src.api.routers.exploit import router as exploit_router
 from src.api.routers.online_learning import router as online_learning_router
 from src.api.routers.projects import router as projects_router
 from src.api.state import EVENTS_LOG_DIR, online_learning_client
@@ -238,7 +237,22 @@ app.include_router(chat_router)
 app.include_router(conversations_router)
 app.include_router(projects_router)
 app.include_router(online_learning_router)
-app.include_router(exploit_router)
+
+# /exploit/* is lab-only tooling that asks the LLM to synthesize working
+# exploit code + run instructions. It is NOT gated by PolicyEngine today
+# (that only exists on the CLI path), has no rate limit of its own, and
+# has no role check beyond "any authenticated user" -- so it stays off
+# unless explicitly opted into for local/lab use. Do not set this to "1"
+# on a public deploy (e.g. render.yaml) until it has real policy-engine
+# gating, human-approval, and rate limiting. See DEPLOY.md.
+if os.getenv("ENABLE_EXPLOIT_ROUTER", "0").strip().lower() in ("1", "true", "yes"):
+    from src.api.routers.exploit import router as exploit_router
+
+    logging.getLogger(__name__).warning(
+        "ENABLE_EXPLOIT_ROUTER is on -- /exploit/* is mounted and reachable "
+        "by any authenticated user. Do not run this on a public deployment."
+    )
+    app.include_router(exploit_router)
 
 # ============================================================
 # Healthcheck

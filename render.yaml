@@ -38,6 +38,11 @@ services:
           property: connectionString
       - key: LOG_FORMAT
         value: json
+      # /exploit/* is lab-only and unguarded (no PolicyEngine, no
+      # human-approval, no dedicated rate limit) -- keep this off on any
+      # public deploy. See DEPLOY.md.
+      - key: ENABLE_EXPLOIT_ROUTER
+        value: "0"
       # Secrets Render shouldn't generate or guess -- set these in the
       # dashboard after the first deploy (sync: false means "Blueprint
       # won't touch this value once it's set").
