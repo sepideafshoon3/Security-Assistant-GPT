@@ -8,6 +8,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+from src.llm.llm_logging import DailyFileHandler
+
 
 # ----------------------------------------------------------------------
 # Logger setup
@@ -73,8 +75,6 @@ def _get_daily_llm_logger() -> logging.Logger:
 
         llm_log = logging.getLogger("mrrobot.llm")
         if not any(getattr(h, "log_dir", None) == log_dir for h in llm_log.handlers):
-            from src.llm.openai_client import DailyFileHandler
-
             h = DailyFileHandler(log_dir=log_dir, prefix="llm")
             h.setFormatter(logging.Formatter("%(message)s"))
             llm_log.addHandler(h)

@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import threading
 import time
 import traceback
 from collections.abc import Iterator
@@ -23,6 +22,7 @@ from pydantic import BaseModel
 from src.api.schemas.schemas import EvidenceItem, FinalPlan, PlanDraft
 from src.core.paths import BASE_DIR
 from src.helpers.load_last_dark_recon import load_latest_dark_recon_summary
+from src.llm.llm_logging import setup_daily_llm_logger
 from src.llm.model_config import get_chat_model
 from src.prompts.layers import build_secure_chat_messages
 from src.prompts.openai.code_context import CODE_CONTEXT_PROMPT
@@ -376,7 +376,7 @@ def run_planning_agent(user_request: str, *, top_k_per_query: int = 5) -> FinalP
 
     from src.tools.registry import dispatch_tool_call
 
-    llm_log = _setup_daily_llm_logger()
+    llm_log = setup_daily_llm_logger()
     base_url = os.getenv("OPENAI_BASE_URL", "").strip()
     model_name = get_chat_model()
 
@@ -1037,88 +1037,6 @@ def _research_pdf_to_text_if_available(pdf_bytes: bytes) -> str | None:
     return None
 
 
-class DailyFileHandler(logging.Handler):
-    """Daily log file handler that writes to:
-    <log_dir>/llm-YYYY-MM-DD.log
-    - If today's file exists, it appends.
-    - If not, it creates it.
-    - Switches file automatically when local date changes.
-    """
-
-    def __init__(
-        self, log_dir: Path, prefix: str = "llm", encoding: str = "utf-8"
-    ) -> None:
-        super().__init__()
-        self.log_dir = Path(log_dir)
-        self.prefix = prefix
-        self.encoding = encoding
-        self._lock = threading.RLock()
-        self._current_date: str | None = None
-        self._fp = None
-
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
-    def _today_path(self) -> Path:
-        ds = datetime.date.today().isoformat()  # YYYY-MM-DD
-        return self.log_dir / f"{self.prefix}-{ds}.log"
-
-    def _ensure_file(self) -> None:
-        ds = datetime.date.today().isoformat()
-        if self._current_date == ds and self._fp:
-            return
-
-        if self._fp:
-            try:
-                self._fp.flush()
-                self._fp.close()
-            except Exception:
-                pass
-            self._fp = None
-
-        path = self._today_path()
-        self._fp = path.open("a", encoding=self.encoding)
-        self._current_date = ds
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            with self._lock:
-                self._ensure_file()
-                assert self._fp is not None
-                self._fp.write(msg + "\n")
-                self._fp.flush()
-        except Exception:
-            # never crash the app because of logging
-            pass
-
-
-def _setup_daily_llm_logger() -> logging.Logger:
-    """Dedicated logger for LLM traces that writes one file per day.
-
-    Location:
-      - env LLM_LOG_DIR if set
-      - else <BASE_DIR>/logs/llm
-    """
-    log_dir_env = os.getenv("LLM_LOG_DIR")
-    if log_dir_env:
-        log_dir = Path(log_dir_env).expanduser()
-    else:
-        log_dir = BASE_DIR / "logs" / "llm"
-
-    llm_logger = logging.getLogger("mrrobot.llm")
-    llm_logger.setLevel(logging.INFO)
-
-    # Avoid duplicate handlers on reloads
-    if any(isinstance(h, DailyFileHandler) for h in llm_logger.handlers):
-        return llm_logger
-
-    h = DailyFileHandler(log_dir=log_dir, prefix="llm")
-    h.setFormatter(logging.Formatter("%(message)s"))  # JSONL line per entry
-    llm_logger.addHandler(h)
-    llm_logger.propagate = False
-    return llm_logger
-
-
 class LLMConfig(BaseModel):
     enabled: bool
     model: str
@@ -1221,7 +1139,7 @@ class OpenAILLMAdvisor:
     def __init__(self, config: LLMConfig):
         self.config = config
 
-        self.llm_logger = _setup_daily_llm_logger()
+        self.llm_logger = setup_daily_llm_logger()
         if not self.config.enabled:
             self.client = None
             return

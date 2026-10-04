@@ -26,6 +26,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from src.llm.llm_logging import DailyFileHandler
 from src.search.exploitdb_client import ExploitDBClient
 from src.search.local_web_search import WebResult, web_search
 from src.search.searchsploit_client import SearchsploitClient
@@ -55,8 +56,6 @@ def _get_tool_jsonl_logger() -> logging.Logger:
 
         _logger = logging.getLogger("mrrobot.tools")
         if not any(getattr(h, "log_dir", None) == log_dir for h in _logger.handlers):
-            from src.llm.openai_client import DailyFileHandler
-
             h = DailyFileHandler(log_dir=log_dir, prefix="tools")
             h.setFormatter(logging.Formatter("%(message)s"))
             _logger.addHandler(h)

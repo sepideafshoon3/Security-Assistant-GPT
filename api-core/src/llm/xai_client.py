@@ -13,6 +13,7 @@ import re
 
 from openai import OpenAI
 
+from src.llm.llm_logging import setup_daily_llm_logger
 from src.llm.model_config import get_chat_model
 from src.llm.openai_client import LLMConfig, OpenAILLMAdvisor, log_method
 from src.prompts.layers import build_secure_chat_messages
@@ -140,9 +141,7 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
         # Intentionally do **not** call OpenAILLMAdvisor.__init__ so we avoid
         # requiring OPENAI_API_KEY when running on xAI.
         self.config = config
-        from src.llm.openai_client import _setup_daily_llm_logger
-
-        self.llm_logger = _setup_daily_llm_logger()
+        self.llm_logger = setup_daily_llm_logger()
         if not self.config.enabled:
             self.client = None
             return
