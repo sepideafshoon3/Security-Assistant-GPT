@@ -13,9 +13,10 @@ import re
 
 from openai import OpenAI
 
+from src.llm.config import LLMConfig
 from src.llm.llm_logging import setup_daily_llm_logger
 from src.llm.model_config import get_chat_model
-from src.llm.openai_client import LLMConfig, OpenAILLMAdvisor, log_method
+from src.llm.openai_client import OpenAILLMAdvisor, log_method
 from src.prompts.layers import build_secure_chat_messages
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from src.agents.dark_recon_agent import run_dark_recon_agent
-from src.llm.openai_client import load_llm_config
+from src.llm.config import load_llm_config
 from src.llm.router import create_advisor
 
 

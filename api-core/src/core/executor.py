@@ -6,7 +6,7 @@ from src.core.models import Plan, Report, ToolResult
 
 # NEW
 from src.core.policy_engine import PolicyEngine
-from src.llm.openai_client import load_llm_config
+from src.llm.config import load_llm_config
 from src.llm.router import create_advisor
 from src.security.audit import audit_log
 from src.tools.bandit_runner import run_bandit

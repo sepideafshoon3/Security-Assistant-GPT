@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.llm.openai_client import LLMConfig
+from src.llm.config import LLMConfig
 from src.llm.router import (
     clear_advisor_cache,
     create_advisor,
