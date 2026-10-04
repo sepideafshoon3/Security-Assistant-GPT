@@ -24,6 +24,11 @@ from src.learning.schemas_online_learning import (
 )
 from src.security.audit import audit_log
 from src.security.auth import get_current_user
+from src.security.rate_limit import (
+    DATASET_BUILD_RATE_LIMIT,
+    ONLINE_LEARNING_RATE_LIMIT,
+    limiter,
+)
 from src.security.service_auth import verify_online_learning_api_key
 
 logger = logging.getLogger(__name__)
@@ -141,6 +146,7 @@ def build_online_learning_dataset_csv(
     response_model=OnlineLearningEventResponse,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit(ONLINE_LEARNING_RATE_LIMIT)
 async def send_online_learning_event(
     body: OnlineLearningEventRequest,
     request: Request,
@@ -196,6 +202,7 @@ async def send_online_learning_event(
     response_model=OnlineLearningBulkResponse,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit(ONLINE_LEARNING_RATE_LIMIT)
 async def send_online_learning_bulk(
     body: OnlineLearningBulkRequest,
     request: Request,
@@ -259,6 +266,7 @@ async def send_online_learning_bulk(
     status_code=status.HTTP_200_OK,
     dependencies=[Depends(verify_online_learning_api_key)],
 )
+@limiter.limit(ONLINE_LEARNING_RATE_LIMIT)
 async def receive_online_learning_event(
     body: IncomingOnlineLearningEvent,
     request: Request,
@@ -303,6 +311,7 @@ async def receive_online_learning_event(
 
 
 @router.post("/online-learning/build-dataset")
+@limiter.limit(DATASET_BUILD_RATE_LIMIT)
 async def build_online_learning_dataset(
     request: Request,
     body: dict[str, Any] = Body(default={}),

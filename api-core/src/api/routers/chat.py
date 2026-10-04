@@ -30,7 +30,7 @@ from src.learning.online_learning_events import ChatTurnEvent
 from src.prompts.task_prompts import build_title_gen_messages
 from src.security.audit import audit_log
 from src.security.auth import get_current_user
-from src.security.rate_limit import CHAT_RATE_LIMIT, limiter
+from src.security.rate_limit import CHAT_RATE_LIMIT, WRITE_RATE_LIMIT, limiter
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,9 @@ async def reattach_generation_stream(
 
 
 @router.post("/conversations/{conversation_id}/stop")
+@limiter.limit(WRITE_RATE_LIMIT)
 async def stop_generation(
+    request: Request,
     conversation_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -356,6 +358,7 @@ async def get_chat_job(
 
 
 @router.post("/v1/chat/completions")
+@limiter.limit(CHAT_RATE_LIMIT)
 async def openai_compatible_chat(
     request: Request,
     body: dict[str, Any] = Body(...),

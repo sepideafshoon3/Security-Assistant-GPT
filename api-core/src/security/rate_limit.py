@@ -1,6 +1,7 @@
 """Rate limiting for endpoints that are cheap to abuse: login (credential
-stuffing / brute force) and chat (cost — each request calls out to the LLM
-provider).
+stuffing / brute force), chat (cost — each request calls out to the LLM
+provider), and every state-changing (POST/PATCH/DELETE) endpoint, so a
+single client can't hammer the database or disk.
 
 Backed by slowapi's default in-memory store, which is fine for a single
 process. If this ever runs as more than one worker/instance, switch the
@@ -21,7 +22,15 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 LOGIN_RATE_LIMIT = os.getenv("RATE_LIMIT_LOGIN", "5/minute")
+# Account creation: stops scripted mass-signup.
+SIGNUP_RATE_LIMIT = os.getenv("RATE_LIMIT_SIGNUP", "5/minute")
 CHAT_RATE_LIMIT = os.getenv("RATE_LIMIT_CHAT", "20/minute")
+# Default for writes to conversations/projects (create, rename, delete).
+WRITE_RATE_LIMIT = os.getenv("RATE_LIMIT_WRITE", "30/minute")
+# Online-learning event ingestion (client -> API and service -> API).
+ONLINE_LEARNING_RATE_LIMIT = os.getenv("RATE_LIMIT_ONLINE_LEARNING", "60/minute")
+# Building a dataset reads and rewrites files on disk — much heavier.
+DATASET_BUILD_RATE_LIMIT = os.getenv("RATE_LIMIT_DATASET_BUILD", "5/minute")
 
 # Keyed by client IP. Good enough against anonymous brute-forcing of
 # /auth/login; for /chat (already authenticated) this still caps abuse

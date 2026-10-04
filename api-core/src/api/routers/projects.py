@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from src.api.schemas.schemas import ProjectCreateRequest, ProjectUpdateRequest
 from src.db.models import Project, User
 from src.db.session import get_db
 from src.security.auth import get_current_user
+from src.security.rate_limit import WRITE_RATE_LIMIT, limiter
 
 router = APIRouter(tags=["projects"])
 
@@ -53,7 +54,9 @@ async def list_projects(
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def create_project(
+    request: Request,
     body: ProjectCreateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -70,7 +73,9 @@ async def create_project(
 
 
 @router.patch("/projects/{project_id}")
+@limiter.limit(WRITE_RATE_LIMIT)
 async def rename_project(
+    request: Request,
     project_id: str,
     body: ProjectUpdateRequest,
     current_user: User = Depends(get_current_user),
@@ -89,7 +94,9 @@ async def rename_project(
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(WRITE_RATE_LIMIT)
 async def delete_project(
+    request: Request,
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

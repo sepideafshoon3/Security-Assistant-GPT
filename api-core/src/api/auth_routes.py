@@ -19,7 +19,7 @@ from src.security.auth import (
     hash_password,
     verify_password,
 )
-from src.security.rate_limit import LOGIN_RATE_LIMIT, limiter
+from src.security.rate_limit import LOGIN_RATE_LIMIT, SIGNUP_RATE_LIMIT, limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -29,7 +29,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit(SIGNUP_RATE_LIMIT)
 def signup(
+    request: Request,
     body: SignupRequest,
     db: Session = Depends(get_db),
 ) -> AuthResponse:

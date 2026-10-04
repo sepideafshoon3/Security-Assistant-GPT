@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from src.api.schemas.schemas import ConversationRenameRequest
@@ -10,6 +10,7 @@ from src.core.models import ConversationSummary
 from src.db.models import Conversation, GenerationJob, Project, User
 from src.db.session import get_db
 from src.security.auth import get_current_user
+from src.security.rate_limit import WRITE_RATE_LIMIT, limiter
 
 router = APIRouter(tags=["conversations"])
 
@@ -88,7 +89,9 @@ def _get_owned_conversation_or_404(
 @router.delete(
     "/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT
 )
+@limiter.limit(WRITE_RATE_LIMIT)
 async def delete_conversation(
+    request: Request,
     conversation_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -99,7 +102,9 @@ async def delete_conversation(
 
 
 @router.patch("/conversations/{conversation_id}")
+@limiter.limit(WRITE_RATE_LIMIT)
 async def update_conversation(
+    request: Request,
     conversation_id: str,
     body: ConversationRenameRequest,
     current_user: User = Depends(get_current_user),
