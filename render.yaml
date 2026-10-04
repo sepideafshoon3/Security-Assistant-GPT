@@ -20,6 +20,12 @@ services:
     plan: free # sleeps after 15 min idle -- fine for staging, see DEPLOY.md
     healthCheckPath: /health
     envVars:
+      # Explicit, not relying on Render's own port auto-detection (which
+      # scans for an open port and is documented as occasionally timing
+      # out) -- the Dockerfile's CMD already reads $PORT, so this makes
+      # the actual port deterministic instead of detected.
+      - key: PORT
+        value: "8000"
       - key: APP_ENV
         value: production
       - key: JWT_SECRET_KEY
@@ -47,6 +53,8 @@ services:
     dockerContext: ./ui-console
     plan: free # sleeps after 15 min idle -- fine for staging, see DEPLOY.md
     envVars:
+      - key: PORT
+        value: "80"
       # Baked into the static JS at *build* time (Vite has no runtime env
       # config) -- Render auto-translates service env vars into Docker
       # build args, which is how this reaches the Dockerfile's ARG

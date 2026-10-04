@@ -25,8 +25,10 @@ RUN npm run build
 FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker-entrypoint.d/40-substitute-port.sh /docker-entrypoint.d/40-substitute-port.sh
+RUN chmod +x /docker-entrypoint.d/40-substitute-port.sh
 
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
+    CMD wget -qO- http://127.0.0.1:${PORT:-80}/ >/dev/null || exit 1

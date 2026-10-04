@@ -42,7 +42,7 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://127.0.0.1:8000/health || exit 1
+    CMD curl -f http://127.0.0.1:${PORT:-8000}/health || exit 1
 
 # Single worker, deliberately: the in-memory rate limiter
 # (src/security/rate_limit.py) tracks request counts per-process, so
@@ -50,4 +50,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # by running multiple container replicas behind a load balancer instead
 # -- not by raising --workers -- until rate limiting moves to a shared
 # store (e.g. Redis).
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn src.api.http:app --host 0.0.0.0 --port ${PORT:-8000}"]
