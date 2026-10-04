@@ -21,13 +21,7 @@ def main() -> None:
     config_dir = base_dir / "config"
     reports_dir = base_dir / "data" / "reports"
 
-    planner = Planner()
     policy_engine = load_policy_engine(config_dir)
-    executor = Executor(
-        reports_dir=reports_dir,
-        config_dir=config_dir,
-        policy_engine=policy_engine,
-    )
 
     task_id = str(uuid.uuid4())
     task = Task(
@@ -36,12 +30,22 @@ def main() -> None:
         repository_path=args.repository_path,
     )
 
+    # Scope check first: it needs only the policy files, so an out-of-scope
+    # path is rejected before anything heavier (e.g. the LLM client, which
+    # requires OPENAI_API_KEY) is constructed.
     if not policy_engine.is_repository_in_scope(task.repository_path):
         audit_log(
             "repo_out_of_scope",
             {"task_id": task_id, "repository_path": task.repository_path},
         )
         raise SystemExit("Repository out of lab scope")
+
+    planner = Planner()
+    executor = Executor(
+        reports_dir=reports_dir,
+        config_dir=config_dir,
+        policy_engine=policy_engine,
+    )
 
     plan = planner.create_plan(task)
     report = executor.execute_plan(plan)
