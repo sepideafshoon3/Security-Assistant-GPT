@@ -93,3 +93,74 @@ def test_online_learning_build_dataset_is_rate_limited(client, token, auth_heade
     ]
     assert 429 not in codes[:n]
     assert codes[n] == 429
+
+
+# ---------------------------------------------------------------------------
+# Client-IP key: X-Forwarded-For handling
+# ---------------------------------------------------------------------------
+
+
+def _request(xff: list[str] | None = None, peer: str = "10.0.0.1"):
+    from starlette.requests import Request
+
+    headers = [(b"x-forwarded-for", v.encode()) for v in (xff or [])]
+    return Request(
+        {"type": "http", "headers": headers, "client": (peer, 1234), "method": "GET"}
+    )
+
+
+def test_client_ip_ignores_xff_by_default(monkeypatch):
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 0)
+    assert rate_limit.client_ip(_request(["1.2.3.4"])) == "10.0.0.1"
+
+
+def test_client_ip_reads_from_the_right(monkeypatch):
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 1)
+    req = _request(["6.6.6.6, 203.0.113.9"])  # leftmost is forged by the client
+    assert rate_limit.client_ip(req) == "203.0.113.9"
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 2)
+    assert rate_limit.client_ip(_request(["6.6.6.6, 203.0.113.9, 172.16.0.5"])) == (
+        "203.0.113.9"
+    )
+
+
+def test_client_ip_joins_repeated_headers(monkeypatch):
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 1)
+    assert rate_limit.client_ip(_request(["6.6.6.6", "203.0.113.9"])) == "203.0.113.9"
+
+
+def test_client_ip_falls_back_to_socket_when_chain_too_short(monkeypatch):
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 2)
+    assert rate_limit.client_ip(_request(["203.0.113.9"])) == "10.0.0.1"
+    assert rate_limit.client_ip(_request()) == "10.0.0.1"
+
+
+def test_forged_leftmost_xff_cannot_dodge_login_limit(client, monkeypatch):
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 1)
+    n = _count(rate_limit.LOGIN_RATE_LIMIT)
+    codes = [
+        client.post(
+            "/auth/login",
+            json={"email": "a@example.com", "password": "wrong-password-1"},
+            headers={"X-Forwarded-For": f"9.9.9.{i}, 203.0.113.9"},
+        ).status_code
+        for i in range(n + 1)
+    ]
+    assert codes[n] == 429
+
+
+def test_different_proxy_seen_clients_get_separate_buckets(client, monkeypatch):
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 1)
+    n = _count(rate_limit.LOGIN_RATE_LIMIT)
+    for _ in range(n + 1):
+        client.post(
+            "/auth/login",
+            json={"email": "a@example.com", "password": "wrong-password-1"},
+            headers={"X-Forwarded-For": "203.0.113.9"},
+        )
+    other = client.post(
+        "/auth/login",
+        json={"email": "a@example.com", "password": "wrong-password-1"},
+        headers={"X-Forwarded-For": "198.51.100.7"},
+    )
+    assert other.status_code != 429

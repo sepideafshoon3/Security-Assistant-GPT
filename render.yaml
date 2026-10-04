@@ -38,6 +38,12 @@ services:
           property: connectionString
       - key: LOG_FORMAT
         value: json
+      # Render's proxies sit in front of the app, so the socket address is
+      # always theirs. 1 = key rate limits on the last X-Forwarded-For
+      # entry (appended by Render, not forgeable by the client). Safe but
+      # possibly coarse; raise to 2 only after verifying -- see DEPLOY.md.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
       # /exploit/* is lab-only and unguarded (no PolicyEngine, no
       # human-approval, no dedicated rate limit) -- keep this off on any
       # public deploy. See DEPLOY.md.

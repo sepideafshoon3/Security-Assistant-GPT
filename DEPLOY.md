@@ -48,6 +48,22 @@ aren't (and can't be, from a YAML file).
 - **CORS_ORIGINS / VITE_API_BASE_URL are hardcoded to each other's URL**
   in `render.yaml` (see step 3 above). If you later add a custom domain,
   update both and push.
+- **Rate limits need `TRUSTED_PROXY_HOPS` behind Render.** The api only
+  ever sees Render's proxy as the connecting address, so without it every
+  user shares one bucket (5 logins/minute for the whole site). The
+  Blueprint sets it to `1`: the client IP is the last `X-Forwarded-For`
+  entry, which Render's own proxy appends. Never read the first entry --
+  clients can forge it and get a fresh bucket per request. Too low only
+  makes buckets coarser; too high makes the key forgeable, so raise it
+  only after checking on staging:
+  1. From one machine send 6 bad logins, each with a different forged
+     header; the 6th must be `429`:
+     `for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w "%{http_code}\n" -X POST https://security-assistant-api.onrender.com/auth/login -H "Content-Type: application/json" -H "X-Forwarded-For: 9.9.9.$i" -d '{"email":"a@example.com","password":"wrong-password-1"}'; done`
+     If you never see `429`, the key is forgeable: set `TRUSTED_PROXY_HOPS`
+     back to `1` (or `0`).
+  2. Right after, send one login from a different network (e.g. phone on
+     mobile data). It must not be `429`; if it is, the bucket is too
+     coarse (Cloudflare edge shared) and you may try `2`, then repeat step 1.
 - **`ENABLE_EXPLOIT_ROUTER` stays `"0"` here on purpose.** `/exploit/*`
   asks the LLM to generate working exploit code and run instructions for
   an arbitrary target; today it's reachable by any authenticated user,
