@@ -1,0 +1,6 @@
+# Repositories the CLI/executor may analyse (prefix match on the path).
+# Adjust to your own lab directories.
+lab_scopes:
+  repositories:
+    - /tmp/lab/
+    - ./lab/

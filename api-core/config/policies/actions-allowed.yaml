@@ -1,0 +1,12 @@
+# Actions the executor may run. Anything not listed is denied.
+actions:
+  - run_semgrep
+  - run_bandit
+  - run_osv_scanner
+  - generate_report
+  - exploit_generate
+
+requirements:
+  # Actions that need an explicit human approval step before they run.
+  human_approval_for:
+    - exploit_generate
