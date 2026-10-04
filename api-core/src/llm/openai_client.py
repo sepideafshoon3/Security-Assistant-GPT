@@ -1432,12 +1432,12 @@ class OpenAILLMAdvisor:
         pattern = re.compile(
             rf"(?ims)"
             rf"(?:^|\n)\s*"
-            rf"(?:#{1,6}\s*|\*\*)?"
+            rf"(?:#{{1,6}}\s*|\*\*)?"
             rf"{title_re}"
             rf"(?:\*\*)?\s*:?"
             rf"\s*\n?"
             rf"(.*?)"
-            rf"(?=\n\s*(?:#{1,6}\s+\S|\*\*\w|---|\Z))"
+            rf"(?=\n\s*(?:#{{1,6}}\s+\S|\*\*\w|---)|\s*\Z)"
         )
         m = pattern.search(t)
         if not m:
