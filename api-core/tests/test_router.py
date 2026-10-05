@@ -21,6 +21,25 @@ from src.prompts.layers import (
     get_engine_for_provider,
 )
 
+
+@pytest.fixture(autouse=True)
+def _hermetic_provider_env(monkeypatch):
+    """A developer's .env (loaded when src.api.http is imported by an earlier
+    test) sets LLM_PROVIDER / OPENAI_BASE_URL, which override model-name
+    detection and make these tests pass or fail depending on the machine."""
+    for name in (
+        "LLM_PROVIDER",
+        "LLM_GATEWAY",
+        "LLM_BACKEND",
+        "OPENROUTER",
+        "OPENAI_BASE_URL",
+        "XAI_BASE_URL",
+        "LLM_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    clear_advisor_cache()
+
+
 # ---------------------------------------------------------------------------
 # detect_provider
 # ---------------------------------------------------------------------------
@@ -147,48 +166,39 @@ def test_openrouter_model_names_on_advisors(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_openai_registry_includes_open_ai_policy():
+def test_openai_registry_has_the_core_prompt_keys():
     reg = build_openai_registry()
-    assert reg.has("open_ai_policy")
-    assert reg.get("open_ai_policy").strip()  # non-empty
-    assert reg.has("system")
-    assert reg.has("policy_controls")
+    for key in ("root", "policy", "style"):
+        assert reg.has(key)
+        assert reg.get(key).strip()
+    assert "Scope rules" in reg.get("policy")
 
 
-def test_xai_registry_omits_open_ai_policy_body():
-    reg = build_xai_registry()
-    assert reg.has("open_ai_policy")
-    assert reg.get("open_ai_policy") == ""
-    assert reg.has("system")
-    assert reg.has("policy_controls")
-    # Policy controls must not pull in OpenAiPolicy content
-    assert "OPEN_AI_POLICY" not in reg.get("policy_controls")
+def test_xai_registry_reuses_the_openai_content():
+    # Documented in build_xai_registry(): same content until a provider
+    # specific override is actually needed.
+    assert build_xai_registry().as_dict() == build_openai_registry().as_dict()
 
 
-def test_xai_prompt_rename_sanity():
-    from src.prompts.xai.final_policy import FINAL_POLICY
-    from src.prompts.xai.policy import POLICY
+def test_xai_advisor_prompt_getters_resolve():
+    """Regression: these imported ``src.prompts.xai.*``, which doesn't exist,
+    so web-search / code-context steps raised ModuleNotFoundError on xAI."""
+    from src.llm.openai_client import OpenAILLMAdvisor
+    from src.llm.xai_client import XaiLLMAdvisor
 
-    # Renamed brand strings
-    joined = FINAL_POLICY + POLICY
-    assert "Xai" in joined or "xai" in joined.lower()
-    assert "OpenAi" not in joined
-    assert "OpenAI" not in joined
+    xai = XaiLLMAdvisor.__new__(XaiLLMAdvisor)
+    oai = OpenAILLMAdvisor.__new__(OpenAILLMAdvisor)
+    assert xai._get_search_query_prompt().strip()
+    assert xai._get_code_context_prompt().strip()
+    assert xai._get_search_query_prompt() == oai._get_search_query_prompt()
+    assert xai._get_code_context_prompt() == oai._get_code_context_prompt()
 
 
-def test_no_xai_policy_module():
-    xai_dir = Path(__file__).resolve().parents[1] / "src" / "prompts" / "xai"
-    assert (xai_dir / "OpenAiPolicy.py").exists() is False
-    assert (xai_dir / "XaiPolicy.py").exists() is False
-    # Source OpenAiPolicy untouched
-    openai_policy = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "prompts"
-        / "openai"
-        / "OpenAiPolicy.py"
-    )
-    assert openai_policy.is_file()
+def test_there_is_no_separate_xai_prompt_package():
+    prompts = Path(__file__).resolve().parents[1] / "src" / "prompts"
+    assert not (prompts / "xai").exists()
+    assert (prompts / "openai" / "search_query.py").is_file()
+    assert (prompts / "openai" / "code_context.py").is_file()
 
 
 def test_secure_chat_with_xai_engine():
@@ -210,10 +220,10 @@ def test_get_prompt_engine_via_router():
     eng_openai = get_prompt_engine("openai")
     eng_xai = get_prompt_engine("xai")
     eng_from_model = get_prompt_engine("x-ai/grok-4.5")
-    assert eng_openai.registry.has("open_ai_policy")
-    assert eng_openai.registry.get("open_ai_policy").strip()
-    assert eng_xai.registry.get("open_ai_policy") == ""
-    assert eng_from_model.registry.get("open_ai_policy") == ""
+    for eng in (eng_openai, eng_xai, eng_from_model):
+        assert eng.registry.has("root") and eng.registry.has("policy")
+    assert eng_xai.registry.as_dict() == eng_openai.registry.as_dict()
+    assert eng_from_model.registry.as_dict() == eng_openai.registry.as_dict()
 
 
 # ---------------------------------------------------------------------------
@@ -261,9 +271,8 @@ def test_create_advisor_openai_from_model_name():
     assert not isinstance(advisor, XaiLLMAdvisor)
 
 
-def test_xai_secure_chat_messages_use_xai_prompts():
-    """XaiLLMAdvisor._build_secure_chat_messages pulls the xAI registry."""
-    clear_advisor_cache()
+def test_xai_secure_chat_messages_include_the_security_stack():
+    """XaiLLMAdvisor._build_secure_chat_messages builds from the xAI engine."""
     cfg = LLMConfig(enabled=False, model="grok-3")
     advisor = create_advisor(cfg)
     msgs = advisor._build_secure_chat_messages(
@@ -272,6 +281,8 @@ def test_xai_secure_chat_messages_use_xai_prompts():
         api_user_message=None,
         dark_recon_ctx=None,
     )
-    joined = "\n".join(str(m.get("content") or "") for m in msgs)
-    # xAI-renamed strings should appear somewhere in the security stack
-    assert "Xai" in joined or "xai" in joined.lower() or "Mr Robot" in joined
+    assert msgs[-1] == {"role": "user", "content": "ping"}
+    system = "\n".join(m["content"] for m in msgs if m.get("role") == "system")
+    reg = build_xai_registry()
+    assert reg.get("root") in system
+    assert "Scope rules" in system

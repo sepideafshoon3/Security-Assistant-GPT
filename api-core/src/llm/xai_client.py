@@ -2,7 +2,9 @@
 """xAI LLM client — mirrors :class:`OpenAILLMAdvisor` structure for Grok models.
 
 Uses the OpenAI-compatible xAI API (``https://api.x.ai/v1`` by default).
-Prompt packages are selected via :mod:`src.llm.router` (``src.prompts.xai``).
+Prompt bodies are shared with the OpenAI advisor (:mod:`src.prompts.openai`);
+there is no separate ``src.prompts.xai`` package. The engine is selected via
+:mod:`src.llm.router`.
 """
 
 from __future__ import annotations
@@ -242,13 +244,13 @@ class XaiLLMAdvisor(OpenAILLMAdvisor):
         )
 
     def _get_search_query_prompt(self) -> str:
-        from src.prompts.xai.search_query import SEARCH_QUERY_PROMPT
+        from src.prompts.openai.search_query import SEARCH_QUERY_PROMPT
 
         # Static prompt - safe, but ensure it's not user-editable
         return SEARCH_QUERY_PROMPT
 
     def _get_code_context_prompt(self) -> str:
-        from src.prompts.xai.code_context import CODE_CONTEXT_PROMPT
+        from src.prompts.openai.code_context import CODE_CONTEXT_PROMPT
 
         # Static prompt - safe, but ensure it's not user-editable
         return CODE_CONTEXT_PROMPT

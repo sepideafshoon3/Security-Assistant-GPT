@@ -1,9 +1,8 @@
 """Mr Robot prompt modules and layered prompting library.
 
-Provider-specific prompt bodies live under:
-
-- :mod:`src.prompts.openai` (e.g. ``src.prompts.openai.system.SYSTEM``)
-- :mod:`src.prompts.xai` (e.g. ``src.prompts.xai.system.SYSTEM``)
+Prompt bodies live in :mod:`src.prompts.openai` and are shared by every
+provider (the xAI advisor reuses them); the layered content registries are
+built in :mod:`src.prompts.layers.registry`.
 
 Layer composition is handled by :mod:`src.prompts.layers`. Provider
 selection is owned by :mod:`src.llm.router`.
