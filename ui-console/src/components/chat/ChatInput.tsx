@@ -13,7 +13,7 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onFocus: () => void;
+  onFocus?: () => void; // ← فقط ? اضافه کن
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   showHint: boolean;
   disabled?: boolean;
@@ -212,7 +212,7 @@ export function ChatInput({
               color: "var(--fg-primary)",
             }}
           >
-            <Square className="w-3.5 h-3.5" fill="currentColor" />
+            <Square className="w-3.5 h-3.5 text-fg-tertiary" fill="currentColor" />
           </button>
         ) : (
           <button

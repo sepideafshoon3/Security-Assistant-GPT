@@ -186,6 +186,7 @@ export function ChatArea({
     e.preventDefault();
     const trimmed = inputValue.trim();
     if (!trimmed) return;
+
     triggerStart();
     onSendMessage(trimmed);
     setInputValue("");
@@ -391,13 +392,12 @@ export function ChatArea({
           >
             {!hasStarted && <Greeting />}
 
-            <div ref={inputWrapperRef} className="w-full max-w-2xl pointer-events-auto">
+            <div ref={inputWrapperRef} className="w-full max-w-5xl pointer-events-auto">
               <ChatInput
                 value={inputValue}
                 onChange={setInputValue}
                 onSubmit={handleSubmit}
                 onKeyDown={handleKeyDown}
-                onFocus={triggerStart}
                 textareaRef={textareaRef}
                 showHint={hasStarted}
                 disabled={isLoading}

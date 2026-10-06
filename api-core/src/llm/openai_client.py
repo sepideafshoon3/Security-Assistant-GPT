@@ -111,7 +111,6 @@ MAX_TOOL_CALL_ROUNDS = 8
 # ======================================================================
 
 
-
 # Keywords that indicate the user query is security/hacking related and
 # should activate the full offensive persona prompts.  General queries
 # (e.g. "newest iphone", "best laptop 2026") must NOT trigger this.
@@ -230,10 +229,6 @@ def log_method(func):
             raise
 
     return wrapper
-
-
-
-
 
 
 class OpenAILLMAdvisor:

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, Fragment } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import type { Conversation, Project } from "../App";
 import {
   Search,
@@ -15,6 +15,9 @@ import {
   Share2,
   Folder,
   FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  Clock3,
 } from "lucide-react";
 import { cn } from "./ui/utils";
 import { UserMenu } from "./UserMenu";
@@ -88,9 +91,11 @@ const STATUS_STYLES: Record<
   },
 };
 
-// A pseudo-id for the trailing "everything else" group; real projects
-// always have a real id, so this can't collide with one.
-const NO_PROJECT = "__none__";
+type ProjectGroup = {
+  id: string;
+  project: Project;
+  conversations: Conversation[];
+};
 
 export function ConversationList({
   conversations,
@@ -117,25 +122,58 @@ export function ConversationList({
   onDeleteProject,
 }: ConversationListProps) {
   const [query, setQuery] = useState("");
+
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
   const [renamingId, setRenamingId] = useState<string | null>(null);
+
   const [renameValue, setRenameValue] = useState("");
+
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
   const renameInputRef = useRef<HTMLInputElement>(null);
 
+  /*
+   * Individual project collapse state.
+   *
+   * Example:
+   *
+   * collapsedGroups = {
+   *   "project-1",
+   *   "project-3"
+   * }
+   */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  /*
+   * Main sidebar sections.
+   *
+   * Pinned
+   * Projects
+   * Recent
+   */
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
+
   const [projectRenameValue, setProjectRenameValue] = useState("");
+
   const [openProjectMenuId, setOpenProjectMenuId] = useState<string | null>(null);
+
   const [pendingDeleteProjectId, setPendingDeleteProjectId] = useState<string | null>(null);
+
   const projectRenameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (renamingId) renameInputRef.current?.focus();
+    if (renamingId) {
+      renameInputRef.current?.focus();
+    }
   }, [renamingId]);
 
   useEffect(() => {
-    if (renamingProjectId) projectRenameInputRef.current?.focus();
+    if (renamingProjectId) {
+      projectRenameInputRef.current?.focus();
+    }
   }, [renamingProjectId]);
 
   const startRename = (conversation: Conversation) => {
@@ -145,9 +183,15 @@ export function ConversationList({
 
   const commitRename = () => {
     if (!renamingId) return;
+
     const trimmed = renameValue.trim();
-    if (trimmed) onRenameConversation(renamingId, trimmed);
+
+    if (trimmed) {
+      onRenameConversation(renamingId, trimmed);
+    }
+
     setRenamingId(null);
+    setRenameValue("");
   };
 
   const cancelRename = () => {
@@ -162,9 +206,15 @@ export function ConversationList({
 
   const commitProjectRename = () => {
     if (!renamingProjectId) return;
+
     const trimmed = projectRenameValue.trim();
-    if (trimmed) onRenameProject(renamingProjectId, trimmed);
+
+    if (trimmed) {
+      onRenameProject(renamingProjectId, trimmed);
+    }
+
     setRenamingProjectId(null);
+    setProjectRenameValue("");
   };
 
   const cancelProjectRename = () => {
@@ -172,90 +222,174 @@ export function ConversationList({
     setProjectRenameValue("");
   };
 
-  const toggleGroupCollapsed = (groupId: string) =>
+  const toggleProjectCollapsed = (projectId: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
+
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+
       return next;
     });
+  };
 
-  const pendingDeleteConversation = conversations.find((c) => c.id === pendingDeleteId);
-  const pendingDeleteProject = projects.find((p) => p.id === pendingDeleteProjectId);
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+
+      return next;
+    });
+  };
+
+  const isSectionCollapsed = (sectionId: string) => collapsedSections.has(sectionId);
+
+  const pendingDeleteConversation = conversations.find(
+    (conversation) => conversation.id === pendingDeleteId,
+  );
+
+  const pendingDeleteProject = projects.find((project) => project.id === pendingDeleteProjectId);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+
     return conversations.filter(
-      (c) => !q || c.title.toLowerCase().includes(q) || c.lastMessage.toLowerCase().includes(q),
+      (conversation) =>
+        !q ||
+        conversation.title.toLowerCase().includes(q) ||
+        conversation.lastMessage.toLowerCase().includes(q),
     );
   }, [conversations, query]);
 
   const byRecency = (a: Conversation, b: Conversation) =>
     b.timestamp.getTime() - a.timestamp.getTime();
 
-  const { pinned, groups } = useMemo(() => {
-    const unpinned = filtered.filter((c) => !c.pinned);
-    const groupMap = new Map<string, Conversation[]>();
-    for (const c of unpinned) {
-      const key = c.projectId ?? NO_PROJECT;
-      const bucket = groupMap.get(key);
-      if (bucket) bucket.push(c);
-      else groupMap.set(key, [c]);
-    }
+  /*
+   * IMPORTANT:
+   *
+   * Pinned:
+   *   every pinned conversation.
+   *
+   * Projects:
+   *   conversations which:
+   *     1. are NOT pinned
+   *     2. have a projectId
+   *
+   * Recent:
+   *   conversations which:
+   *     1. are NOT pinned
+   *     2. don't have a projectId
+   */
+  const { pinned, projectGroups, recent } = useMemo(() => {
+    const pinnedConversations = filtered
+      .filter((conversation) => conversation.pinned)
+      .sort(byRecency);
 
-    const orderedGroups: { id: string; project: Project | null; conversations: Conversation[] }[] =
-      [];
-    for (const project of projects) {
-      const bucket = groupMap.get(project.id);
-      if (bucket && bucket.length > 0) {
-        orderedGroups.push({ id: project.id, project, conversations: bucket.sort(byRecency) });
+    const unpinned = filtered.filter((conversation) => !conversation.pinned);
+
+    const projectMap = new Map<string, Conversation[]>();
+
+    const recentConversations: Conversation[] = [];
+
+    for (const conversation of unpinned) {
+      if (!conversation.projectId) {
+        recentConversations.push(conversation);
+        continue;
+      }
+
+      const bucket = projectMap.get(conversation.projectId);
+
+      if (bucket) {
+        bucket.push(conversation);
+      } else {
+        projectMap.set(conversation.projectId, [conversation]);
       }
     }
-    const rest = groupMap.get(NO_PROJECT);
-    if (rest && rest.length > 0) {
-      orderedGroups.push({ id: NO_PROJECT, project: null, conversations: rest.sort(byRecency) });
-    }
+
+    const groups: ProjectGroup[] = projects.map((project) => ({
+      id: project.id,
+      project,
+      conversations: (projectMap.get(project.id) ?? []).sort(byRecency),
+    }));
+
+    /*
+     * When searching, don't show empty projects.
+     *
+     * Without search:
+     * show every project the user has created,
+     * even if it currently has zero conversations.
+     */
+    const visibleGroups = query.trim()
+      ? groups.filter((group) => group.conversations.length > 0)
+      : groups;
 
     return {
-      pinned: filtered.filter((c) => c.pinned).sort(byRecency),
-      groups: orderedGroups,
+      pinned: pinnedConversations,
+      projectGroups: visibleGroups,
+      recent: recentConversations.sort(byRecency),
     };
-  }, [filtered, projects]);
+  }, [filtered, projects, query]);
 
   const formatTime = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
+
     const minutes = Math.floor(diff / 60000);
+
     const hours = Math.floor(diff / 3600000);
+
     const days = Math.floor(diff / 86400000);
 
     if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes}m`;
     if (hours < 24) return `${hours}h`;
+
     return `${days}d`;
   };
 
   const handleSelect = (id: string) => {
     onSelectConversation(id);
-    if (isMobile) onClose();
+
+    if (isMobile) {
+      onClose();
+    }
   };
 
   const handleNew = () => {
     onNewConversation();
-    if (isMobile) onClose();
+
+    if (isMobile) {
+      onClose();
+    }
   };
 
-  const renderConversationRow = (conversation: Conversation) => {
+  /*
+   * Conversation row
+   */
+  const renderConversationRow = (conversation: Conversation, nested = false) => {
     const status = STATUS_STYLES[conversation.status ?? "clean"];
+
     const isSelected = selectedConversationId === conversation.id;
+
     const isActive = processingConversationIds.has(conversation.id);
+
     const isRenaming = renamingId === conversation.id;
+
     return (
       <div
         key={conversation.id}
         role="listitem"
         className={cn(
           "group relative w-full border-b border-border/60 transition-colors",
+          nested && "ml-2 w-[calc(100%-0.5rem)] border-l border-border/40",
           isSelected && "bg-accent-soft border-l-2 border-l-accent-hover",
         )}
       >
@@ -264,7 +398,7 @@ export function ConversationList({
           onClick={() => !isRenaming && handleSelect(conversation.id)}
           title={isActive ? "Agent is working..." : status.label}
           className={cn(
-            "w-full p-4 hover:bg-secondary transition-colors text-left",
+            "w-full p-3.5 hover:bg-secondary transition-colors text-left",
             isSelected && "hover:bg-transparent",
           )}
         >
@@ -278,6 +412,7 @@ export function ConversationList({
               )}
               aria-hidden
             />
+
             {isRenaming ? (
               <input
                 ref={renameInputRef}
@@ -307,15 +442,18 @@ export function ConversationList({
                 {conversation.pinned && (
                   <Pin className="w-3 h-3 text-fg-faint shrink-0 rotate-45" aria-hidden />
                 )}
+
                 <span className="truncate">{conversation.title}</span>
               </h3>
             )}
+
             {!isRenaming && (
               <span className="text-xs text-fg-faint shrink-0 group-hover:opacity-0 transition-opacity">
                 {formatTime(conversation.timestamp)}
               </span>
             )}
           </div>
+
           {!isRenaming && (
             <p className="text-sm text-fg-tertiary truncate pl-4">{conversation.lastMessage}</p>
           )}
@@ -349,6 +487,7 @@ export function ConversationList({
                   <MoreHorizontal className="w-3.5 h-3.5" aria-hidden />
                 </button>
               </DropdownMenuTrigger>
+
               <DropdownMenuContent
                 align="end"
                 onClick={(e) => e.stopPropagation()}
@@ -365,8 +504,10 @@ export function ConversationList({
                   ) : (
                     <Pin className="w-3.5 h-3.5" aria-hidden />
                   )}
+
                   {conversation.pinned ? "Unpin" : "Pin"}
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                   onSelect={() => {
                     startRename(conversation);
@@ -376,6 +517,7 @@ export function ConversationList({
                   <Pencil className="w-3.5 h-3.5" aria-hidden />
                   Rename
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                   variant="destructive"
                   onSelect={() => {
@@ -386,7 +528,9 @@ export function ConversationList({
                   <Trash2 className="w-3.5 h-3.5" aria-hidden />
                   Delete
                 </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
+
                 <ProjectSubmenu
                   projects={projects}
                   currentProjectId={conversation.projectId}
@@ -396,10 +540,12 @@ export function ConversationList({
                   }}
                   onCreateProject={onCreateProject}
                 />
+
                 <DropdownMenuItem disabled title="Coming soon">
                   <Users className="w-3.5 h-3.5" aria-hidden />
                   Add to group
                 </DropdownMenuItem>
+
                 <DropdownMenuItem disabled title="Coming soon">
                   <Share2 className="w-3.5 h-3.5" aria-hidden />
                   Share
@@ -412,97 +558,164 @@ export function ConversationList({
     );
   };
 
-  const renderGroupHeader = (group: {
+  /*
+   * MAIN SECTION HEADER
+   *
+   * Pinned
+   * Projects
+   * Recent
+   */
+  const renderSectionHeader = ({
+    id,
+    label,
+    icon,
+    count,
+  }: {
     id: string;
-    project: Project | null;
-    conversations: Conversation[];
+    label: string;
+    icon: React.ReactNode;
+    count: number;
   }) => {
-    const isCollapsed = collapsedGroups.has(group.id);
-    const isRenaming = group.project && renamingProjectId === group.project.id;
-    return (
-      <div
-        key={`${group.id}-header`}
-        className="group/header sticky top-0 z-10 bg-surface-deep/95 backdrop-blur-xl flex items-center gap-1.5 px-4 py-1.5 border-b border-border/40"
-      >
-        <button
-          onClick={() => toggleGroupCollapsed(group.id)}
-          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
-          aria-expanded={!isCollapsed}
-        >
-          {isCollapsed ? (
-            <Folder className="w-3.5 h-3.5 text-fg-faint shrink-0" aria-hidden />
-          ) : (
-            <FolderOpen className="w-3.5 h-3.5 text-fg-faint shrink-0" aria-hidden />
-          )}
-          {isRenaming ? (
-            <input
-              ref={projectRenameInputRef}
-              value={projectRenameValue}
-              onChange={(e) => setProjectRenameValue(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitProjectRename();
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  cancelProjectRename();
-                }
-              }}
-              onBlur={commitProjectRename}
-              className="flex-1 min-w-0 bg-input-background border border-accent-hover/50 rounded px-1.5 py-0.5 text-xs text-fg-primary outline-none focus:ring-1 focus:ring-accent-hover/40"
-            />
-          ) : (
-            <span className="text-xs font-medium text-fg-tertiary uppercase tracking-wide truncate">
-              {group.project ? group.project.name : "No project"}
-            </span>
-          )}
-          <span className="text-xs text-fg-faint shrink-0">{group.conversations.length}</span>
-        </button>
+    const collapsed = isSectionCollapsed(id);
 
-        {group.project && !isRenaming && (
-          <div
-            className={cn(
-              "transition-opacity",
-              openProjectMenuId === group.project.id
-                ? "opacity-100"
-                : "opacity-0 group-hover/header:opacity-100 focus-within:opacity-100",
-            )}
+    return (
+      <button
+        onClick={() => toggleSection(id)}
+        aria-expanded={!collapsed}
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-secondary/70 transition-colors group"
+      >
+        <span className="w-4 h-4 flex items-center justify-center shrink-0 text-fg-faint">
+          {collapsed ? (
+            <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5" aria-hidden />
+          )}
+        </span>
+
+        <span className="text-fg-faint shrink-0">{icon}</span>
+
+        <span className="text-xs font-semibold text-fg-tertiary uppercase tracking-wide flex-1">
+          {label}
+        </span>
+
+        <span className="text-[11px] text-fg-faint">{count}</span>
+      </button>
+    );
+  };
+
+  /*
+   * PROJECT TREE NODE
+   */
+  const renderProject = (group: ProjectGroup) => {
+    const collapsed = collapsedGroups.has(group.id);
+
+    const isRenaming = renamingProjectId === group.project.id;
+
+    return (
+      <div key={group.project.id} className="group/project">
+        <div className="flex items-center gap-1 hover:bg-secondary/60 transition-colors">
+          <button
+            onClick={() => toggleProjectCollapsed(group.project.id)}
+            aria-expanded={!collapsed}
+            className="flex-1 min-w-0 flex items-center gap-1.5 pl-7 pr-2 py-2 text-left"
           >
-            <DropdownMenu
-              open={openProjectMenuId === group.project.id}
-              onOpenChange={(open) => setOpenProjectMenuId(open ? group.project!.id : null)}
+            <span className="w-3.5 shrink-0">
+              {collapsed ? (
+                <ChevronRight className="w-3.5 h-3.5 text-fg-faint" aria-hidden />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-fg-faint" aria-hidden />
+              )}
+            </span>
+
+            {collapsed ? (
+              <Folder className="w-4 h-4 text-fg-tertiary shrink-0" aria-hidden />
+            ) : (
+              <FolderOpen className="w-4 h-4 text-fg-tertiary shrink-0" aria-hidden />
+            )}
+
+            {isRenaming ? (
+              <input
+                ref={projectRenameInputRef}
+                value={projectRenameValue}
+                onChange={(e) => setProjectRenameValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitProjectRename();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelProjectRename();
+                  }
+                }}
+                onBlur={commitProjectRename}
+                className="flex-1 min-w-0 bg-input-background border border-accent-hover/50 rounded px-1.5 py-0.5 text-sm text-fg-primary outline-none focus:ring-1 focus:ring-accent-hover/40"
+              />
+            ) : (
+              <span className="text-sm text-fg-secondary truncate">{group.project.name}</span>
+            )}
+
+            <span className="text-[11px] text-fg-faint ml-auto shrink-0">
+              {group.conversations.length}
+            </span>
+          </button>
+
+          {!isRenaming && (
+            <div
+              className={cn(
+                "mr-2 transition-opacity",
+                openProjectMenuId === group.project.id
+                  ? "opacity-100"
+                  : "opacity-0 group-hover/project:opacity-100 focus-within:opacity-100",
+              )}
             >
-              <DropdownMenuTrigger asChild>
-                <button
-                  aria-label="Project options"
-                  className="p-1 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
-                >
-                  <MoreHorizontal className="w-3.5 h-3.5" aria-hidden />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    startProjectRename(group.project!);
-                    setOpenProjectMenuId(null);
-                  }}
-                >
-                  <Pencil className="w-3.5 h-3.5" aria-hidden />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => {
-                    setPendingDeleteProjectId(group.project!.id);
-                    setOpenProjectMenuId(null);
-                  }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden />
-                  Delete project
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <DropdownMenu
+                open={openProjectMenuId === group.project.id}
+                onOpenChange={(open) => setOpenProjectMenuId(open ? group.project.id : null)}
+              >
+                <DropdownMenuTrigger asChild>
+                  <button
+                    aria-label="Project options"
+                    className="p-1.5 rounded text-fg-tertiary hover:text-fg-primary hover:bg-secondary transition-colors"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" aria-hidden />
+                  </button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      startProjectRename(group.project);
+                      setOpenProjectMenuId(null);
+                    }}
+                  >
+                    <Pencil className="w-3.5 h-3.5" aria-hidden />
+                    Rename
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => {
+                      setPendingDeleteProjectId(group.project.id);
+                      setOpenProjectMenuId(null);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                    Delete project
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
+
+        {!collapsed && (
+          <div className="relative ml-[2.15rem] mr-2 border-l border-border/50">
+            {group.conversations.length > 0 ? (
+              group.conversations.map((conversation) => renderConversationRow(conversation, true))
+            ) : (
+              <div className="px-4 py-2 text-xs text-fg-faint">No conversations yet</div>
+            )}
           </div>
         )}
       </div>
@@ -511,7 +724,6 @@ export function ConversationList({
 
   return (
     <>
-      {/* Mobile backdrop: tapping outside the drawer closes it */}
       {isMobile && (
         <div
           onClick={onClose}
@@ -537,10 +749,11 @@ export function ConversationList({
         )}
       >
         <div className="w-[85vw] max-w-80 md:w-80 h-full flex flex-col">
-          {/* New chat + search */}
+          {/* Header */}
           <div className="p-4 border-b border-border space-y-3">
             <div className="flex items-center justify-between gap-2 md:hidden">
               <span className="text-sm text-fg-secondary font-medium">Conversations</span>
+
               <button
                 onClick={onClose}
                 aria-label="Close sidebar"
@@ -549,15 +762,19 @@ export function ConversationList({
                 <X className="w-4 h-4" aria-hidden />
               </button>
             </div>
+
             <button
               onClick={handleNew}
               className="w-full bg-accent hover:bg-accent-hover active:scale-[0.98] rounded-lg py-2.5 flex items-center justify-center gap-2 transition-all"
             >
               <Plus className="w-4 h-4 text-white" />
+
               <span className="text-white text-sm font-medium">New Review</span>
             </button>
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
+
               <input
                 type="text"
                 value={query}
@@ -568,7 +785,7 @@ export function ConversationList({
             </div>
           </div>
 
-          {/* Conversations */}
+          {/* Content */}
           <div className="flex-1 overflow-y-auto" role="list" aria-label="Conversation list">
             {isLoadingConversations ? (
               <div className="p-4 space-y-3" aria-hidden>
@@ -587,37 +804,70 @@ export function ConversationList({
               </p>
             ) : (
               <>
+                {/* =========================
+                    PINNED
+                ========================== */}
                 {pinned.length > 0 && (
-                  <>
-                    <div className="sticky top-0 z-10 bg-surface-deep/95 backdrop-blur-xl flex items-center gap-1.5 px-4 py-1.5 border-b border-border/40">
-                      <Pin className="w-3.5 h-3.5 text-fg-faint shrink-0 rotate-45" aria-hidden />
-                      <span className="text-xs font-medium text-fg-tertiary uppercase tracking-wide">
-                        Pinned
-                      </span>
-                      <span className="text-xs text-fg-faint">{pinned.length}</span>
-                    </div>
-                    {pinned.map(renderConversationRow)}
-                  </>
+                  <section>
+                    {renderSectionHeader({
+                      id: "pinned",
+                      label: "Pinned",
+                      icon: <Pin className="w-3.5 h-3.5 rotate-45" aria-hidden />,
+                      count: pinned.length,
+                    })}
+
+                    {!isSectionCollapsed("pinned") && (
+                      <div>{pinned.map(renderConversationRow)}</div>
+                    )}
+                  </section>
                 )}
-                {groups.map((group) => (
-                  <Fragment key={group.id}>
-                    {renderGroupHeader(group)}
-                    {!collapsedGroups.has(group.id) &&
-                      group.conversations.map(renderConversationRow)}
-                  </Fragment>
-                ))}
+
+                {/* =========================
+                    PROJECTS
+                ========================== */}
+                {projectGroups.length > 0 && (
+                  <section>
+                    {renderSectionHeader({
+                      id: "projects",
+                      label: "Projects",
+                      icon: <Folder className="w-3.5 h-3.5" aria-hidden />,
+                      count: projectGroups.length,
+                    })}
+
+                    {!isSectionCollapsed("projects") && (
+                      <div className="py-0.5">{projectGroups.map(renderProject)}</div>
+                    )}
+                  </section>
+                )}
+
+                {/* =========================
+                    RECENT
+                ========================== */}
+                {recent.length > 0 && (
+                  <section>
+                    {renderSectionHeader({
+                      id: "recent",
+                      label: "Recent",
+                      icon: <Clock3 className="w-3.5 h-3.5" aria-hidden />,
+                      count: recent.length,
+                    })}
+
+                    {!isSectionCollapsed("recent") && (
+                      <div>{recent.map(renderConversationRow)}</div>
+                    )}
+                  </section>
+                )}
               </>
             )}
           </div>
 
-          {/* Footer. Note: the rest of this sidebar is unconditionally dark
-            (bg-surface-deep/60 etc.), but this row still carries light/dark
-            pairs from before that change — pre-existing, left as-is here. */}
+          {/* Footer */}
           <div className="p-3 border-t border-border flex items-center justify-between">
             <div className="text-xs text-fg-faint">
               {conversations.length} conversation
               {conversations.length === 1 ? "" : "s"}
             </div>
+
             <button
               onClick={toggleTheme}
               aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -632,6 +882,7 @@ export function ConversationList({
                 )}
                 aria-hidden
               />
+
               <Moon
                 className={cn(
                   "w-4 h-4 absolute inset-0 m-auto transition-all duration-300",
@@ -644,6 +895,7 @@ export function ConversationList({
             </button>
           </div>
 
+          {/* User */}
           {userEmail ? (
             <div className="p-2 border-t border-border">
               <UserMenu email={userEmail} onLogout={onLogout} />
@@ -653,6 +905,7 @@ export function ConversationList({
               <p className="text-xs text-fg-faint leading-relaxed">
                 برای دیدن گفتگوهای ذخیره‌شده و ادامه‌ی بررسی‌هات وارد شو.
               </p>
+
               <button
                 onClick={onLoginClick}
                 className="w-full h-8 rounded-lg border border-border text-fg-secondary text-sm hover:bg-secondary transition-colors"
@@ -664,6 +917,7 @@ export function ConversationList({
         </div>
       </nav>
 
+      {/* Delete conversation */}
       <AlertDialog
         open={pendingDeleteId !== null}
         onOpenChange={(open) => !open && setPendingDeleteId(null)}
@@ -671,17 +925,23 @@ export function ConversationList({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this conversation?</AlertDialogTitle>
+
             <AlertDialogDescription>
               {pendingDeleteConversation
                 ? `"${pendingDeleteConversation.title}" and all of its messages will be permanently deleted. This can't be undone.`
                 : "This conversation and all of its messages will be permanently deleted. This can't be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Cancel</AlertDialogCancel>
+
             <AlertDialogAction
               onClick={() => {
-                if (pendingDeleteId) onDeleteConversation(pendingDeleteId);
+                if (pendingDeleteId) {
+                  onDeleteConversation(pendingDeleteId);
+                }
+
                 setPendingDeleteId(null);
               }}
               className="bg-status-danger text-white hover:bg-status-danger/90"
@@ -692,6 +952,7 @@ export function ConversationList({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Delete project */}
       <AlertDialog
         open={pendingDeleteProjectId !== null}
         onOpenChange={(open) => !open && setPendingDeleteProjectId(null)}
@@ -699,19 +960,25 @@ export function ConversationList({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+
             <AlertDialogDescription>
               {pendingDeleteProject
-                ? `"${pendingDeleteProject.name}" will be deleted. Its conversations won't be deleted — they'll just move back to "No project".`
-                : "This project will be deleted. Its conversations won't be deleted — they'll just move back to \"No project\"."}
+                ? `"${pendingDeleteProject.name}" will be deleted. Its conversations won't be deleted — they'll just move back to "Recent".`
+                : "This project will be deleted. Its conversations won't be deleted — they'll just move back to \"Recent\"."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setPendingDeleteProjectId(null)}>
               Cancel
             </AlertDialogCancel>
+
             <AlertDialogAction
               onClick={() => {
-                if (pendingDeleteProjectId) onDeleteProject(pendingDeleteProjectId);
+                if (pendingDeleteProjectId) {
+                  onDeleteProject(pendingDeleteProjectId);
+                }
+
                 setPendingDeleteProjectId(null);
               }}
               className="bg-status-danger text-white hover:bg-status-danger/90"
