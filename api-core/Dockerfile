@@ -23,6 +23,11 @@ RUN apt-get update \
 
 COPY pyproject.toml ./
 COPY src ./src
+# Loaded at import time by src/api/state.py (PolicyEngine reads
+# config/policies/*.yaml; LLM settings read config/app.yaml). It sits next to
+# `src`, not inside it, so it has to be copied explicitly -- without it the
+# container exits on startup with "Policy directory not found".
+COPY config ./config
 # Read at runtime (the startup migration call, and the `alembic` CLI for
 # manual use) rather than imported as Python -- copied explicitly since
 # they're not part of the `src` package.
