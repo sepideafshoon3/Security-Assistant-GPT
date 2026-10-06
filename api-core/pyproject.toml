@@ -35,8 +35,11 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "mypy",
-    "ruff",
-    "black",
+    # Keep these in sync with .pre-commit-config.yaml. Unpinned, CI installs
+    # the newest releases while pre-commit runs the pinned ones, and newer
+    # ruff re-sorts imports differently -> CI fails on code pre-commit passes.
+    "ruff==0.8.6",
+    "black==24.10.0",
     "pre-commit",
 ]
 postgres = [
