@@ -102,7 +102,7 @@ from src.api.routers.chat import router as chat_router
 from src.api.routers.conversations import router as conversations_router
 from src.api.routers.online_learning import router as online_learning_router
 from src.api.routers.projects import router as projects_router
-from src.api.state import EVENTS_LOG_DIR, online_learning_client
+from src.api.state import online_learning_client
 from src.db.migrate import run_migrations
 from src.security.auth import ensure_jwt_secret_configured
 from src.security.rate_limit import limiter
@@ -130,7 +130,31 @@ else:
 # FastAPI app
 # ============================================================
 
-app = FastAPI(title="Security Assistant GPT (Lab)")
+
+def _docs_enabled() -> bool:
+    """Swagger UI / ReDoc / openapi.json publish every route and schema.
+    Handy locally, but on a public deploy they hand attackers a map of the
+    API, so they default to on only for local dev (same APP_ENV split as
+    JWT_SECRET_KEY and CORS_ORIGINS). ENABLE_DOCS=1/0 overrides either way.
+    """
+    explicit = os.getenv("ENABLE_DOCS", "").strip().lower()
+    if explicit:
+        return explicit in ("1", "true", "yes", "on")
+    return os.getenv("APP_ENV", "development").strip().lower() in (
+        "development",
+        "dev",
+        "local",
+    )
+
+
+_docs = _docs_enabled()
+
+app = FastAPI(
+    title="Security Assistant GPT (Lab)",
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -264,5 +288,4 @@ async def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "online_learning_enabled": online_learning_client is not None,
-        "events_log_dir": str(EVENTS_LOG_DIR),
     }

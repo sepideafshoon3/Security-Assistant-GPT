@@ -23,13 +23,16 @@ aren't (and can't be, from a YAML file).
    kept in sync by hand).
 4. Click **Apply**. Render provisions the database first, then builds
    and deploys both Docker services.
-5. Once the first deploy finishes, go to the `security-assistant-api`
-   service's **Environment** tab and fill in the secrets the Blueprint
-   intentionally left blank (`sync: false` in `render.yaml` — these
-   aren't something a Blueprint should generate or guess):
-   - `OPENAI_API_KEY` (required — the backend won't serve chat without it)
+5. The Blueprint intentionally leaves two secrets blank (`sync: false` in
+   `render.yaml` — these aren't something a Blueprint should generate or
+   guess). Render asks for them when you apply a Blueprint for the first
+   time, so **enter `OPENAI_API_KEY` right then**:
+   - `OPENAI_API_KEY` (required — the api refuses to start without it, so
+     if you skip it the first deploy shows as *failed* and restarts in a
+     loop until you add it)
    - `SENTRY_DSN` (optional — leave blank to keep error monitoring off)
-6. Redeploy the `api` service once those are set (Render prompts you to).
+6. If you skipped either, add it in the `security-assistant-api`
+   service's **Environment** tab and redeploy the api service.
 
 ## Things worth knowing before you rely on this for real
 
@@ -73,6 +76,16 @@ aren't (and can't be, from a YAML file).
   `security-assistant-api.onrender.com`. Don't flip it to `"1"` here.
   If you need it, run it locally (`ENABLE_EXPLOIT_ROUTER=1` in your
   `.env`) where only you can reach it.
+- **API docs are off in production.** `/docs`, `/redoc` and
+  `/openapi.json` only exist when `APP_ENV` is `development`/`dev`/`local`
+  (they'd publish a map of every route). Set `ENABLE_DOCS=1` in the
+  dashboard if you really want them on a deploy.
+- **Signup is open by default**, and every chat is a paid OpenAI call, so
+  the rate limits are the only thing between a stranger and your API bill.
+  Once your own account (and any you want to invite) exist, set
+  `SIGNUP_ENABLED=0` in the dashboard and redeploy: signups then return
+  403 while existing users keep logging in. Check usage limits on your
+  OpenAI account either way.
 - Any other env var from `api-core/.env.example` you want in production
   (e.g. `LLM_MODEL`, `RATE_LIMIT_LOGIN`) isn't in `render.yaml` — add it
   directly in the dashboard's Environment tab, same as the `sync: false`

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +26,18 @@ from src.security.rate_limit import LOGIN_RATE_LIMIT, SIGNUP_RATE_LIMIT, limiter
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _signup_enabled() -> bool:
+    """SIGNUP_ENABLED=0 closes registration (e.g. once you've created your own
+    account) so strangers can't run up the LLM bill. Read per request, on by
+    default."""
+    return os.getenv("SIGNUP_ENABLED", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
 @router.post(
     "/signup",
     response_model=AuthResponse,
@@ -35,6 +49,12 @@ def signup(
     body: SignupRequest,
     db: Session = Depends(get_db),
 ) -> AuthResponse:
+    if not _signup_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Signups are currently closed.",
+        )
+
     normalized_email = body.email.lower()
 
     existing = db.query(User).filter(User.email == normalized_email).first()

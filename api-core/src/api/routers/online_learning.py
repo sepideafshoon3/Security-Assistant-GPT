@@ -291,7 +291,7 @@ async def receive_online_learning_event(
         logger.exception("[events] persist failed | type=%s error=%r", event_type, e)
         return IncomingOnlineLearningResponse(
             success=False,
-            message=f"Failed to persist event: {e}",
+            message="Failed to persist event.",
         )
 
     logger.info(
@@ -346,7 +346,7 @@ async def build_online_learning_dataset(
         )
     except Exception as e:
         logger.exception("[dataset] build failed | error=%r", e)
-        raise HTTPException(status_code=500, detail=f"Dataset build failed: {e}") from e
+        raise HTTPException(status_code=500, detail="Dataset build failed.") from e
 
     audit_log(
         "online_learning_build_dataset",
@@ -356,8 +356,6 @@ async def build_online_learning_dataset(
         },
     )
 
-    return {
-        "success": True,
-        "output_path": str(csv_path),
-        "events_dir": str(EVENTS_LOG_DIR),
-    }
+    # Filename only: absolute server paths stay in the audit log, not in
+    # responses any signed-in user can read.
+    return {"success": True, "output_filename": Path(csv_path).name}
