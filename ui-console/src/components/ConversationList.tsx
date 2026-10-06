@@ -817,7 +817,7 @@ export function ConversationList({
                     })}
 
                     {!isSectionCollapsed("pinned") && (
-                      <div>{pinned.map(renderConversationRow)}</div>
+                      <div>{pinned.map((conversation) => renderConversationRow(conversation))}</div>
                     )}
                   </section>
                 )}
@@ -853,7 +853,7 @@ export function ConversationList({
                     })}
 
                     {!isSectionCollapsed("recent") && (
-                      <div>{recent.map(renderConversationRow)}</div>
+                      <div>{recent.map((conversation) => renderConversationRow(conversation))}</div>
                     )}
                   </section>
                 )}

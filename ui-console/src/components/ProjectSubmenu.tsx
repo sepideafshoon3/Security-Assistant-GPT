@@ -47,15 +47,7 @@ export function ProjectSubmenu({
         <FolderPlus className="w-3.5 h-3.5" aria-hidden />
         {currentProjectId ? "Move to project" : "Add to project"}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent
-        className="w-56"
-        onClick={(e) => e.stopPropagation()}
-        onCloseAutoFocus={(e) => {
-          // Keep the inline "new project" input from stealing focus back
-          // once it's done its job.
-          if (isCreating) e.preventDefault();
-        }}
-      >
+      <DropdownMenuSubContent className="w-56" onClick={(e) => e.stopPropagation()}>
         {currentProjectId && (
           <>
             <DropdownMenuItem onSelect={() => onAssign(null)}>
