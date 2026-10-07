@@ -49,9 +49,11 @@ services:
       # public deploy. See DEPLOY.md.
       - key: ENABLE_EXPLOIT_ROUTER
         value: "0"
-      # Secrets Render shouldn't generate or guess -- set these in the
-      # dashboard after the first deploy (sync: false means "Blueprint
-      # won't touch this value once it's set").
+      # Secrets Render shouldn't generate or guess. Render asks for these
+      # when you first apply the Blueprint: enter OPENAI_API_KEY then, because
+      # the api refuses to start without it (skipping it = a failed first
+      # deploy). sync: false means "Blueprint won't touch this value once
+      # it's set", so later changes in the dashboard stick.
       - key: OPENAI_API_KEY
         sync: false
       - key: SENTRY_DSN
