@@ -160,6 +160,29 @@ def _get_owned_conversation(
 # ============================================================
 
 
+@router.get("/generations/active")
+async def list_active_generations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, list[str]]:
+    """Ids of the caller's conversations that are mid-reply right now.
+
+    The console calls this once on load to decide which conversations to
+    re-attach to. Asking ``generation-status`` for every conversation instead
+    cost one request (plus a CORS preflight and a DB lookup) per sidebar
+    entry, every page load.
+    """
+    active = generation_manager.active_ids()
+    if not active:
+        return {"conversation_ids": []}
+    rows = (
+        db.query(Conversation.id)
+        .filter(Conversation.user_id == current_user.id, Conversation.id.in_(active))
+        .all()
+    )
+    return {"conversation_ids": [row[0] for row in rows]}
+
+
 @router.get("/conversations/{conversation_id}/generation-status")
 async def get_generation_status(
     conversation_id: str,

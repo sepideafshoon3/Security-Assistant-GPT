@@ -165,6 +165,23 @@ export async function getGenerationStatus(conversationId: string): Promise<boole
   }
 }
 
+/**
+ * Ids of this user's conversations that are mid-reply right now. One request
+ * for the whole sidebar, instead of asking getGenerationStatus per conversation.
+ */
+export async function getActiveGenerationIds(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/generations/active`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) return [];
+  try {
+    const data = await res.json();
+    return Array.isArray(data.conversation_ids) ? data.conversation_ids : [];
+  } catch {
+    return [];
+  }
+}
+
 /* --------- Conversation list --------- */
 
 export interface BackendHistoryMessage {

@@ -12,6 +12,7 @@ import {
   streamChat,
   attachToGeneration,
   stopGeneration,
+  getActiveGenerationIds,
   getGenerationStatus,
   fetchConversations,
   type BackendConversationSummary,
@@ -267,11 +268,15 @@ export default function App() {
 
         // A refresh no longer kills generation (it runs in a backend
         // task), so re-attach to every conversation that's still mid-reply.
-        // (reattachToGeneration itself skips anything this tab is already
-        // live-streaming — see its guard.)
-        mapped.forEach((conv) => {
-          void reattachToGeneration(conv.id);
-        });
+        // One request names them all; asking per conversation meant N
+        // requests on every load. (reattachToGeneration itself skips anything
+        // this tab is already live-streaming — see its guard.)
+        const generating = new Set(await getActiveGenerationIds());
+        mapped
+          .filter((conv) => generating.has(conv.id))
+          .forEach((conv) => {
+            void reattachToGeneration(conv.id);
+          });
       } catch (e) {
         console.error(e);
         setError(getFriendlyErrorMessage(e));

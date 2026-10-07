@@ -59,6 +59,10 @@ class GenerationManager:
     def is_active(self, conversation_id: str) -> bool:
         return self.get(conversation_id) is not None
 
+    def active_ids(self) -> list[str]:
+        """Conversation ids with a reply being generated right now."""
+        return [cid for cid, gen in self._active.items() if not gen.finished]
+
     # ---- lifecycle -----------------------------------------------------
     def start(
         self,

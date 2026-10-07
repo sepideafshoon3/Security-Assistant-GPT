@@ -81,23 +81,23 @@ All backend settings are environment variables (loaded from `api-core/.env` in
 development). The ones you are most likely to touch; see
 [`api-core/.env.example`](api-core/.env.example) for the full list.
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `OPENAI_API_KEY` | – (required) | LLM provider key. |
-| `LLM_MODEL` / `OPENAI_DEFAULT_CHAT_MODEL` | see `.env.example` | Chat model name. |
-| `OPENAI_BASE_URL` | OpenAI | Point at any OpenAI-compatible endpoint (e.g. OpenRouter). |
-| `APP_ENV` | `development` | Anything other than `development`/`dev`/`local` makes `JWT_SECRET_KEY` and `CORS_ORIGINS` **required**. |
-| `JWT_SECRET_KEY` | dev-only default locally | Signs login tokens. Generate: `openssl rand -hex 32`. |
-| `CORS_ORIGINS` | local Vite ports | Comma-separated allowed frontend origins. |
-| `DATABASE_URL` | SQLite file | e.g. `postgresql+psycopg://user:pass@host:5432/db`. |
-| `DB_AUTO_MIGRATE` | `1` | Run `alembic upgrade head` on startup; `0` to run it yourself. |
-| `RATE_LIMIT_LOGIN`, `_SIGNUP`, `_CHAT`, `_WRITE` | `5/minute`, `5/minute`, `20/minute`, `30/minute` | Per-IP limits (in-memory, per process). |
-| `TRUSTED_PROXY_HOPS` | `0` | Proxies in front of the app; set to `1` on Render so limits are per client. |
-| `SIGNUP_ENABLED` | `1` | `0` closes registration (existing users can still log in). |
-| `ENABLE_DOCS` | on in dev only | Force `/docs`, `/redoc`, `/openapi.json` on (`1`) or off (`0`). |
-| `ENABLE_EXPLOIT_ROUTER` | `0` | Mounts `/exploit/*`. Keep off outside a private lab. |
-| `SENTRY_DSN` | unset | Enables Sentry error reporting. |
-| `LOG_LEVEL`, `LOG_FORMAT` | `INFO`, `text` | `LOG_FORMAT=json` for log aggregators. |
+| Variable                                         | Default                                          | Purpose                                                                                                 |
+| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`                                 | – (required)                                     | LLM provider key.                                                                                       |
+| `LLM_MODEL` / `OPENAI_DEFAULT_CHAT_MODEL`        | see `.env.example`                               | Chat model name.                                                                                        |
+| `OPENAI_BASE_URL`                                | OpenAI                                           | Point at any OpenAI-compatible endpoint (e.g. OpenRouter).                                              |
+| `APP_ENV`                                        | `development`                                    | Anything other than `development`/`dev`/`local` makes `JWT_SECRET_KEY` and `CORS_ORIGINS` **required**. |
+| `JWT_SECRET_KEY`                                 | dev-only default locally                         | Signs login tokens. Generate: `openssl rand -hex 32`.                                                   |
+| `CORS_ORIGINS`                                   | local Vite ports                                 | Comma-separated allowed frontend origins.                                                               |
+| `DATABASE_URL`                                   | SQLite file                                      | e.g. `postgresql+psycopg://user:pass@host:5432/db`.                                                     |
+| `DB_AUTO_MIGRATE`                                | `1`                                              | Run `alembic upgrade head` on startup; `0` to run it yourself.                                          |
+| `RATE_LIMIT_LOGIN`, `_SIGNUP`, `_CHAT`, `_WRITE` | `5/minute`, `5/minute`, `20/minute`, `30/minute` | Per-IP limits (in-memory, per process).                                                                 |
+| `TRUSTED_PROXY_HOPS`                             | `0`                                              | Proxies in front of the app; set to `1` on Render so limits are per client.                             |
+| `SIGNUP_ENABLED`                                 | `1`                                              | `0` closes registration (existing users can still log in).                                              |
+| `ENABLE_DOCS`                                    | on in dev only                                   | Force `/docs`, `/redoc`, `/openapi.json` on (`1`) or off (`0`).                                         |
+| `ENABLE_EXPLOIT_ROUTER`                          | `0`                                              | Mounts `/exploit/*`. Keep off outside a private lab.                                                    |
+| `SENTRY_DSN`                                     | unset                                            | Enables Sentry error reporting.                                                                         |
+| `LOG_LEVEL`, `LOG_FORMAT`                        | `INFO`, `text`                                   | `LOG_FORMAT=json` for log aggregators.                                                                  |
 
 The frontend has one setting, `VITE_API_BASE_URL`. It is baked in **at build time**,
 so changing it means rebuilding the frontend, not just restarting it.
